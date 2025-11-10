@@ -38,9 +38,8 @@ dependencies:
   http: ^1.2.0  # Add this line
   mongo_dart: ^0.9.1 # Use the latest version
   # 💡 NEW: For querying media files
-  on_audio_query: ^2.9.0  # Use the stable 2.x version
-
-  # 💡 NEW: For handling runtime permissions
+  on_audio_query: ^2.9.0
+   # 💡 NEW: For handling runtime permissions
   permission_handler: ^11.3.0
 
 
