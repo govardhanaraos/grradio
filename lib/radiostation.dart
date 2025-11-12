@@ -1,12 +1,11 @@
 import 'package:audio_service/audio_service.dart';
-import 'package:flutter/material.dart';
 
 class RadioStation {
   final String id;
   final String name;
   final String streamUrl;
   final String? logoUrl;
-  final String? genre;
+  final String? language;
   final String? description;
 
   const RadioStation({
@@ -14,7 +13,7 @@ class RadioStation {
     required this.name,
     required this.streamUrl,
     this.logoUrl,
-    this.genre,
+    this.language,
     this.description,
   });
 
@@ -30,7 +29,7 @@ class RadioStation {
       streamUrl: map['streamUrl'] as String,
       // Use null-aware operators to safely assign optional fields
       logoUrl: map['logoUrl'] as String?,
-      genre: map['genre'] as String?,
+      language: map['language'] as String?,
       description: map['description'] as String?,
     );
   }
@@ -39,7 +38,7 @@ class RadioStation {
     id: id,
     title: name,
     artist: 'Internet Radio',
-    genre: genre,
+    genre: language,
     artUri: logoUrl != null ? Uri.parse(logoUrl!) : null,
     extras: {'description': description},
   );

@@ -4,24 +4,7 @@
             "outputFile": "com.radio.grradio.app-mergeDebugResources-32:/values-si/values-si.xml",
             "map": [
                 {
-                    "source": "D:\\.gradle\\caches\\8.12\\transforms\\9522066c7a08d06efa61a5798688577f\\transformed\\jetified-media3-exoplayer-1.4.1\\res\\values-si\\values-si.xml",
-                    "from": {
-                        "startLines": "2,3,4,5,6,7,8,9,10",
-                        "startColumns": "4,4,4,4,4,4,4,4,4",
-                        "startOffsets": "55,131,191,254,320,396,465,554,640",
-                        "endColumns": "75,59,62,65,75,68,88,85,69",
-                        "endOffsets": "126,186,249,315,391,460,549,635,705"
-                    },
-                    "to": {
-                        "startLines": "9,10,11,12,13,14,15,16,17",
-                        "startColumns": "4,4,4,4,4,4,4,4,4",
-                        "startOffsets": "787,863,923,986,1052,1128,1197,1286,1372",
-                        "endColumns": "75,59,62,65,75,68,88,85,69",
-                        "endOffsets": "858,918,981,1047,1123,1192,1281,1367,1437"
-                    }
-                },
-                {
-                    "source": "D:\\.gradle\\caches\\8.12\\transforms\\5788b9bb42bcfbc29bff963457c6d7cd\\transformed\\core-1.13.1\\res\\values-si\\values-si.xml",
+                    "source": "D:\\.gradle\\caches\\8.12\\transforms\\80328e144fd3ca5b3565930e737c9c7b\\transformed\\core-1.13.1\\res\\values-si\\values-si.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",
@@ -35,6 +18,23 @@
                         "startOffsets": "55,157,260,365,470,569,673,1442",
                         "endColumns": "101,102,104,104,98,103,113,100",
                         "endOffsets": "152,255,360,465,564,668,782,1538"
+                    }
+                },
+                {
+                    "source": "D:\\.gradle\\caches\\8.12\\transforms\\93c8465e852ced437bfc97896b600233\\transformed\\jetified-media3-exoplayer-1.4.1\\res\\values-si\\values-si.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9,10",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,131,191,254,320,396,465,554,640",
+                        "endColumns": "75,59,62,65,75,68,88,85,69",
+                        "endOffsets": "126,186,249,315,391,460,549,635,705"
+                    },
+                    "to": {
+                        "startLines": "9,10,11,12,13,14,15,16,17",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "787,863,923,986,1052,1128,1197,1286,1372",
+                        "endColumns": "75,59,62,65,75,68,88,85,69",
+                        "endOffsets": "858,918,981,1047,1123,1192,1281,1367,1437"
                     }
                 }
             ]

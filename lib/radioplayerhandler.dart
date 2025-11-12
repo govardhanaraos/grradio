@@ -1,12 +1,8 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
-import 'package:flutter/material.dart';
-import 'package:grradio/main.dart';
 import 'package:grradio/radiostation.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:http/http.dart' as http;
-
-import 'radiostation.dart';
+import 'package:just_audio/just_audio.dart';
 
 class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
   final _player = AudioPlayer();
@@ -72,7 +68,7 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     // 1. Determine which controls are supported in the current state
     final controls = <MediaControl>[];
 
-// 1. Pause/Play Control: Must be present if media is loaded
+    // 1. Pause/Play Control: Must be present if media is loaded
     if (mediaItem.value != null) {
       if (playing) {
         controls.add(MediaControl.pause);
@@ -97,14 +93,18 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
       playbackState.value.copyWith(
         controls: controls,
 
-        systemActions: controls.toSet().cast<MediaAction>(), // Crucial for Android notification buttons
-        processingState: {
-          ProcessingState.idle: AudioProcessingState.idle,
-          ProcessingState.loading: AudioProcessingState.loading,
-          ProcessingState.buffering: AudioProcessingState.buffering,
-          ProcessingState.ready: AudioProcessingState.ready,
-          ProcessingState.completed: AudioProcessingState.completed,
-        }[processingState] ?? AudioProcessingState.idle,
+        systemActions: controls
+            .toSet()
+            .cast<MediaAction>(), // Crucial for Android notification buttons
+        processingState:
+            {
+              ProcessingState.idle: AudioProcessingState.idle,
+              ProcessingState.loading: AudioProcessingState.loading,
+              ProcessingState.buffering: AudioProcessingState.buffering,
+              ProcessingState.ready: AudioProcessingState.ready,
+              ProcessingState.completed: AudioProcessingState.completed,
+            }[processingState] ??
+            AudioProcessingState.idle,
         playing: playing,
       ),
     );

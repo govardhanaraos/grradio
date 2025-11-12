@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.radio.grradio"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36  // Updated to 36 for plugin compatibility
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -16,29 +16,61 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.radio.grradio"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = flutter.minSdkVersion  // Set explicitly for better compatibility
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Signing with the debug keys for now
             signingConfig = signingConfigs.getByName("debug")
         }
+    }
+
+    // Disable R8/ProGuard completely for release builds
+    buildTypes.forEach { buildType ->
+        buildType.isMinifyEnabled = false
+        buildType.isShrinkResources = false
     }
 }
 
 flutter {
     source = "../.."
+}
+
+// Fix APK output location for Flutter - must be outside android block
+afterEvaluate {
+    tasks.named("assembleRelease").configure {
+        doLast {
+            val apkDir = file("${project.rootDir}/../build/app/outputs/flutter-apk")
+            apkDir.mkdirs()
+
+            val releaseApk = file("${buildDir}/outputs/apk/release/app-release.apk")
+            if (releaseApk.exists()) {
+                releaseApk.copyTo(File(apkDir, "app-release.apk"), overwrite = true)
+                println("✓ APK copied to: ${apkDir.absolutePath}/app-release.apk")
+            }
+        }
+    }
+}
+afterEvaluate {
+    tasks.named("assembleDebug").configure {
+        doLast {
+            val apkDir = file("${project.rootDir}/../build/app/outputs/flutter-apk")
+            apkDir.mkdirs()
+
+            val releaseApk = file("${buildDir}/outputs/apk/debug/app-debug.apk")
+            if (releaseApk.exists()) {
+                releaseApk.copyTo(File(apkDir, "app-debug.apk"), overwrite = true)
+                println("✓ APK copied to: ${apkDir.absolutePath}/app-debug.apk")
+            }
+        }
+    }
 }

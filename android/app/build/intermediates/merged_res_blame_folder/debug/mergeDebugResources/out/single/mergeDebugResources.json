@@ -22,5 +22,9 @@
     {
         "merged": "com.radio.grradio.app-debug-34:/mipmap-xhdpi_ic_launcher.png.flat",
         "source": "com.radio.grradio.app-main-36:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.radio.grradio.app-debug-34:/xml_network_security_config.xml.flat",
+        "source": "com.radio.grradio.app-main-36:/xml/network_security_config.xml"
     }
 ]

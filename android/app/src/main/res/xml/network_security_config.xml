@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">prclive1.listenon.in</domain>
+        <domain includeSubdomains="true">radioindia.net</domain>
+        <domain includeSubdomains="true">air.pc.cdn.bitgravity.com</domain>
+        <domain includeSubdomains="true">picsum.photos</domain>
+        <domain includeSubdomains="true">www.redfm.com</domain>
+        <domain includeSubdomains="true">158.69.245.228</domain>
+        <domain includeSubdomains="true">185.105.4.103</domain>
+    </domain-config>
+
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
