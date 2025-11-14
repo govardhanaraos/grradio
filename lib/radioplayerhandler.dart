@@ -1,13 +1,20 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:grradio/radiostation.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart'; // For file path access
+import 'package:permission_handler/permission_handler.dart'; // For permission checks
 
 class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
   final _player = AudioPlayer();
   RadioStation? _currentStation;
   bool _isLoading = false;
+  // 💡 NEW: State to track recording status
+  bool _isRecording = false;
 
   // 💡 FIX 1: New field to store the station list passed in the constructor
   final List<RadioStation> _radioStations;
@@ -29,6 +36,66 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     });
   }
 
+  // 💡 NEW: Method to toggle recording state and handle simulation
+  Future<void> toggleRecord(MediaItem? mediaItem) async {
+    if (mediaItem == null || !playbackState.value.playing) {
+      // Cannot start recording if nothing is playing
+      print("Cannot toggle recording: No media item or not playing.");
+      return;
+    }
+
+    if (!_isRecording) {
+      // --- Start Recording Simulation ---
+      final filename = '${mediaItem.title.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.mp3';
+      
+      String savePath = "Downloads/$filename"; // Default display path
+
+      if (!kIsWeb) {
+        // 🚨 FIX: Use getApplicationDocumentsDirectory() instead of getExternalStoragePublicDirectory()
+        // getExternalStoragePublicDirectory() is not part of path_provider package's public API.
+        final directory = await getApplicationDocumentsDirectory();
+        savePath = '${directory.path}/$filename';
+      }
+
+      print('SIMULATED: Started recording ${mediaItem.title}. Target path: $savePath');
+
+      _isRecording = true;
+      // You would start the actual stream capture here
+      
+      // 2. Send custom event to update the UI state
+      _sendRecordStatus(true);
+      
+    } else {
+      // --- Stop Recording Simulation ---
+      print("SIMULATED: Recording stopped. File saved to Downloads.");
+      
+      // You would stop the actual stream capture here and finalize the file write
+      _isRecording = false;
+
+      // 3. Send custom event to update the UI state
+      _sendRecordStatus(false);
+    }
+  }
+
+  // Helper to send the custom event to the UI
+  void _sendRecordStatus(bool isRecording) {
+    customEvent.add({'event': 'record_status', 'isRecording': isRecording});
+  }
+
+  // Override to ensure recording stops when playback stops
+  @override
+  Future<void> stop() async {
+    // 💡 NEW: Stop recording if playing stops
+    if (_isRecording) {
+      await toggleRecord(mediaItem.value);
+    }
+
+    await _player.stop();
+    _currentStation = null;
+    mediaItem.add(null);
+  }
+
+  // --- Other existing methods (setupAudioSession, notifyAudioHandler, updatePlaybackState, tryFallbackUrls, play, pause, skipToNext, skipToPrevious, playStation, currentStation, isLoading) remain the same ---
   Future<void> _setupAudioSession() async {
     final session = await AudioSession.instance;
     await session.configure(
@@ -250,14 +317,12 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
   Future<void> pause() => _player.pause();
 
   @override
-  Future<void> stop() async {
-    await _player.stop();
-    _currentStation = null;
-    mediaItem.add(null);
-  }
-
-  @override
   Future<void> skipToNext() async {
+    // 💡 NEW: Stop recording before changing station
+    if (_isRecording) {
+      await toggleRecord(mediaItem.value);
+    }
+
     final currentIndex = _currentStation != null
         ? _radioStations.indexWhere(
             (station) => station.id == _currentStation!.id,
@@ -275,6 +340,11 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> skipToPrevious() async {
+    // 💡 NEW: Stop recording before changing station
+    if (_isRecording) {
+      await toggleRecord(mediaItem.value);
+    }
+    
     final currentIndex = _currentStation != null
         ? _radioStations.indexWhere(
             (station) => station.id == _currentStation!.id,
@@ -301,4 +371,7 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   // Check if loading
   bool get isLoading => _isLoading;
+
+  // 💡 FIX: Public getter to expose the recording status to the UI
+  bool get isRecording => _isRecording;
 }

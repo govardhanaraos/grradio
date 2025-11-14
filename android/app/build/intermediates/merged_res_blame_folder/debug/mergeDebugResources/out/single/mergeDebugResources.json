@@ -4,12 +4,36 @@
         "source": "com.radio.grradio.app-main-36:/mipmap-xxhdpi/ic_launcher.png"
     },
     {
+        "merged": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-debug-34:\\mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-main-36:\\mipmap-xxhdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-debug-34:\\mipmap-mdpi_ic_launcher.png.flat",
+        "source": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-main-36:\\mipmap-mdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-debug-34:\\mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-main-36:\\mipmap-xxxhdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-debug-34:\\mipmap-hdpi_ic_launcher.png.flat",
+        "source": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-main-36:\\mipmap-hdpi\\ic_launcher.png"
+    },
+    {
         "merged": "com.radio.grradio.app-debug-34:/mipmap-xxxhdpi_ic_launcher.png.flat",
         "source": "com.radio.grradio.app-main-36:/mipmap-xxxhdpi/ic_launcher.png"
     },
     {
-        "merged": "com.radio.grradio.app-debug-34:/drawable-v21_launch_background.xml.flat",
-        "source": "com.radio.grradio.app-main-36:/drawable-v21/launch_background.xml"
+        "merged": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-debug-34:\\drawable-v21_launch_background.xml.flat",
+        "source": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-main-36:\\drawable-v21\\launch_background.xml"
+    },
+    {
+        "merged": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-debug-34:\\mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-main-36:\\mipmap-xhdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-debug-34:\\xml_network_security_config.xml.flat",
+        "source": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-main-36:\\xml\\network_security_config.xml"
     },
     {
         "merged": "com.radio.grradio.app-debug-34:/mipmap-mdpi_ic_launcher.png.flat",
@@ -22,9 +46,5 @@
     {
         "merged": "com.radio.grradio.app-debug-34:/mipmap-xhdpi_ic_launcher.png.flat",
         "source": "com.radio.grradio.app-main-36:/mipmap-xhdpi/ic_launcher.png"
-    },
-    {
-        "merged": "com.radio.grradio.app-debug-34:/xml_network_security_config.xml.flat",
-        "source": "com.radio.grradio.app-main-36:/xml/network_security_config.xml"
     }
 ]
