@@ -20,6 +20,57 @@ dependencies:
   # Downgraded to more stable version
   on_audio_query: ^2.6.0
   permission_handler: ^11.3.0
+  path_provider: ^2.1.2 # To find the file path
+  dio: ^5.4.0 # Or the latest version
+  share_plus: ^12.0.1
+  cupertino_icons: ^1.0.2
+  intl: ^0.20.2 # Or the latest stable version
+# pubspec.yaml
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+  flutter_native_splash: ^2.3.1
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/ # Ensure this path includes your logo image
+
+flutter_native_splash:
+  # Color of the background
+  color: "#FFFFFF" # Use a color that matches your app's theme (e.g., white)
+
+  # 💡 CRITICAL: Define the path to your large logo image
+  image: assets/images/gr_radio_logo_vibgyor.png
+
+  # OPTIONAL: Set a maximum size for the image (as a fraction of the screen)
+  # Recommended for a big logo
+  image_android: assets/images/gr_radio_logo_vibgyor.png
+  image_ios: assets/images/gr_radio_logo_vibgyor.png
+
+  # Android Specific (controls size):
+  # Set this to true to cover the entire screen (usually for background images)
+  # or false to center the image with padding (best for logos).
+  android_12:
+    image: assets/images/gr_radio_logo_vibgyor.png
+
+  # iOS Specific (controls size):
+  # You can control the positioning on iOS using the 'branding' image or similar
+  # properties if needed, but the main 'image' setting usually scales appropriately.
+
+# pubspec.yaml (at the very bottom)
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+
+  # 💡 Path to your logo image (use a PNG with transparent background if possible)
+  image_path: "assets/icons/gr_radio_launch_logo_vibgyor.png"
+
+  # Configuration for Android Adaptive Icons:
+  adaptive_icon_background: "#FFFFFF" # Use a solid color (e.g., white) or a path to a background image
+  adaptive_icon_foreground: "assets/icons/gr_radio_launch_logo_vibgyor.png" # Path to your logo

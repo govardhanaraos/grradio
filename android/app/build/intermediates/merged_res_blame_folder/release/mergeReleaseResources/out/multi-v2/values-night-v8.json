@@ -1,7 +1,31 @@
 {
     "logs": [
         {
-            "outputFile": "com.radio.grradio.app-mergeReleaseResources-32:/values-night-v8/values-night-v8.xml",
+            "outputFile": "com.radio.grradio.app-mergeReleaseResources-34:/values-night-v8/values-night-v8.xml",
+            "map": [
+                {
+                    "source": "D:\\Flutter_projects\\Flutter_apps\\grradio\\android\\app\\src\\main\\res\\values-night\\styles.xml",
+                    "from": {
+                        "startLines": "3,-1",
+                        "startColumns": "4,-1",
+                        "startOffsets": "172,-1",
+                        "endLines": "11,-1",
+                        "endColumns": "12,-1",
+                        "endOffsets": "747,-1"
+                    },
+                    "to": {
+                        "startLines": "2,10",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,507",
+                        "endLines": "9,12",
+                        "endColumns": "12,12",
+                        "endOffsets": "502,671"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "D:\\.gradle\\daemon\\8.12\\com.radio.grradio.app-mergeReleaseResources-34:\\values-night-v8\\values-night-v8.xml",
             "map": [
                 {
                     "source": "D:\\Flutter_projects\\Flutter_apps\\grradio\\android\\app\\src\\main\\res\\values-night\\styles.xml",

@@ -88,6 +88,20 @@
       externalAnnotations="annotations.zip"
       proguardRules="proguard.txt"/>
   <library
+      name=":@@:share_plus::release"
+      jars="D:\.gradle\caches\8.12\transforms\808e2d16426f4327fb44fe3d140afda7\transformed\out\jars\classes.jar;D:\.gradle\caches\8.12\transforms\808e2d16426f4327fb44fe3d140afda7\transformed\out\jars\libs\R.jar"
+      resolved="dev.fluttercommunity.plus.share:share_plus:1.0-SNAPSHOT"
+      partialResultsDir="C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\share_plus-12.0.1\android\build\intermediates\lint_vital_partial_results\release\lintVitalAnalyzeRelease\out"
+      folder="D:\.gradle\caches\8.12\transforms\808e2d16426f4327fb44fe3d140afda7\transformed\out"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
       name=":@@:sqflite_android::release"
       jars="D:\.gradle\caches\8.12\transforms\5a9111d72bf74f7cc40c7e73e858d385\transformed\out\jars\classes.jar;D:\.gradle\caches\8.12\transforms\5a9111d72bf74f7cc40c7e73e858d385\transformed\out\jars\libs\R.jar"
       resolved="com.tekartik.sqflite:sqflite_android:1.0-SNAPSHOT"
@@ -210,10 +224,10 @@
       externalAnnotations="annotations.zip"
       proguardRules="proguard.txt"/>
   <library
-      name="androidx.core:core-ktx:1.13.1@aar"
-      jars="D:\.gradle\caches\8.12\transforms\adf56912c2b798d666589c217c6663e1\transformed\jetified-core-ktx-1.13.1\jars\classes.jar"
-      resolved="androidx.core:core-ktx:1.13.1"
-      folder="D:\.gradle\caches\8.12\transforms\adf56912c2b798d666589c217c6663e1\transformed\jetified-core-ktx-1.13.1"
+      name="androidx.core:core-ktx:1.16.0@aar"
+      jars="D:\.gradle\caches\8.12\transforms\7a6a1d61a3b4c6059095188afda57905\transformed\jetified-core-ktx-1.16.0\jars\classes.jar"
+      resolved="androidx.core:core-ktx:1.16.0"
+      folder="D:\.gradle\caches\8.12\transforms\7a6a1d61a3b4c6059095188afda57905\transformed\jetified-core-ktx-1.16.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -249,10 +263,10 @@
       externalAnnotations="annotations.zip"
       proguardRules="proguard.txt"/>
   <library
-      name="androidx.core:core:1.13.1@aar"
-      jars="D:\.gradle\caches\8.12\transforms\80328e144fd3ca5b3565930e737c9c7b\transformed\core-1.13.1\jars\classes.jar"
-      resolved="androidx.core:core:1.13.1"
-      folder="D:\.gradle\caches\8.12\transforms\80328e144fd3ca5b3565930e737c9c7b\transformed\core-1.13.1"
+      name="androidx.core:core:1.16.0@aar"
+      jars="D:\.gradle\caches\8.12\transforms\6d8395e26a4078fbcc07fb292e5286fb\transformed\core-1.16.0\jars\classes.jar"
+      resolved="androidx.core:core:1.16.0"
+      folder="D:\.gradle\caches\8.12\transforms\6d8395e26a4078fbcc07fb292e5286fb\transformed\core-1.16.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -322,10 +336,10 @@
       externalAnnotations="annotations.zip"
       proguardRules="proguard.txt"/>
   <library
-      name="androidx.annotation:annotation-experimental:1.4.0@aar"
-      jars="D:\.gradle\caches\8.12\transforms\0cf0d808b62f3c5a216376b60283b623\transformed\jetified-annotation-experimental-1.4.0\jars\classes.jar"
-      resolved="androidx.annotation:annotation-experimental:1.4.0"
-      folder="D:\.gradle\caches\8.12\transforms\0cf0d808b62f3c5a216376b60283b623\transformed\jetified-annotation-experimental-1.4.0"
+      name="androidx.annotation:annotation-experimental:1.4.1@aar"
+      jars="D:\.gradle\caches\8.12\transforms\1fc671efacf782a634e735d3c765cd14\transformed\jetified-annotation-experimental-1.4.1\jars\classes.jar"
+      resolved="androidx.annotation:annotation-experimental:1.4.1"
+      folder="D:\.gradle\caches\8.12\transforms\1fc671efacf782a634e735d3c765cd14\transformed\jetified-annotation-experimental-1.4.1"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
@@ -378,13 +392,26 @@
       externalAnnotations="annotations.zip"
       proguardRules="proguard.txt"/>
   <library
-      name="androidx.collection:collection:1.2.0@jar"
-      jars="D:\.gradle\caches\modules-2\files-2.1\androidx.collection\collection\1.2.0\34dbc21d203cc4d4d623ac572a21acd4ccd716af\collection-1.2.0.jar"
-      resolved="androidx.collection:collection:1.2.0"/>
+      name="androidx.collection:collection-jvm:1.4.2@jar"
+      jars="D:\.gradle\caches\modules-2\files-2.1\androidx.collection\collection-jvm\1.4.2\bc60b5568a66d765a9fe8e266fd0c6c727e0b50b\collection-jvm-1.4.2.jar"
+      resolved="androidx.collection:collection-jvm:1.4.2"/>
   <library
       name="androidx.annotation:annotation-jvm:1.9.1@jar"
       jars="D:\.gradle\caches\modules-2\files-2.1\androidx.annotation\annotation-jvm\1.9.1\b17951747e38bf3986a24431b9ba0d039958aa5f\annotation-jvm-1.9.1.jar"
       resolved="androidx.annotation:annotation-jvm:1.9.1"/>
+  <library
+      name="androidx.core:core-viewtree:1.0.0@aar"
+      jars="D:\.gradle\caches\8.12\transforms\6e38bd602a2c9e16a553655b04d83c00\transformed\jetified-core-viewtree-1.0.0\jars\classes.jar"
+      resolved="androidx.core:core-viewtree:1.0.0"
+      folder="D:\.gradle\caches\8.12\transforms\6e38bd602a2c9e16a553655b04d83c00\transformed\jetified-core-viewtree-1.0.0"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
   <library
       name="org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1@jar"
       jars="D:\.gradle\caches\modules-2\files-2.1\org.jetbrains.kotlinx\kotlinx-coroutines-android\1.7.1\c2d86b569f10b7fc7e28d3f50c0eed97897d77a7\kotlinx-coroutines-android-1.7.1.jar"
@@ -402,17 +429,9 @@
       jars="D:\.gradle\caches\modules-2\files-2.1\org.jetbrains.kotlin\kotlin-stdlib-jdk7\1.8.20\3aa51faf20aae8b31e1a4bc54f8370673d7b7df4\kotlin-stdlib-jdk7-1.8.20.jar"
       resolved="org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.20"/>
   <library
-      name="org.jetbrains.kotlin:kotlin-stdlib:2.1.0@jar"
-      jars="D:\.gradle\caches\modules-2\files-2.1\org.jetbrains.kotlin\kotlin-stdlib\2.1.0\85f8b81009cda5890e54ba67d64b5e599c645020\kotlin-stdlib-2.1.0.jar"
-      resolved="org.jetbrains.kotlin:kotlin-stdlib:2.1.0"/>
-  <library
-      name="io.flutter:armeabi_v7a_release:1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b@jar"
-      jars="D:\.gradle\caches\modules-2\files-2.1\io.flutter\armeabi_v7a_release\1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b\56ab76990e94536ffcf48ad9869ae866583d6a91\armeabi_v7a_release-1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b.jar"
-      resolved="io.flutter:armeabi_v7a_release:1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b"/>
-  <library
-      name="io.flutter:arm64_v8a_release:1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b@jar"
-      jars="D:\.gradle\caches\modules-2\files-2.1\io.flutter\arm64_v8a_release\1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b\fd44eb102123ca65a65f8342024d897a5754c436\arm64_v8a_release-1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b.jar"
-      resolved="io.flutter:arm64_v8a_release:1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b"/>
+      name="org.jetbrains.kotlin:kotlin-stdlib:2.2.0@jar"
+      jars="D:\.gradle\caches\modules-2\files-2.1\org.jetbrains.kotlin\kotlin-stdlib\2.2.0\fdfc65fbc42fda253a26f61dac3c0aca335fae96\kotlin-stdlib-2.2.0.jar"
+      resolved="org.jetbrains.kotlin:kotlin-stdlib:2.2.0"/>
   <library
       name="io.flutter:x86_64_release:1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b@jar"
       jars="D:\.gradle\caches\modules-2\files-2.1\io.flutter\x86_64_release\1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b\280bc38f5b1e3d714a90224ecbf000b4193ded39\x86_64_release-1.0.0-d2913632a4578ee4d0b8b1c4a69888c8a0672c4b.jar"
@@ -447,6 +466,10 @@
       symbolFile="R.txt"
       externalAnnotations="annotations.zip"
       proguardRules="proguard.txt"/>
+  <library
+      name="org.jspecify:jspecify:1.0.0@jar"
+      jars="D:\.gradle\caches\modules-2\files-2.1\org.jspecify\jspecify\1.0.0\7425a601c1c7ec76645a78d22b8c6a627edee507\jspecify-1.0.0.jar"
+      resolved="org.jspecify:jspecify:1.0.0"/>
   <library
       name="com.getkeepsafe.relinker:relinker:1.4.5@aar"
       jars="D:\.gradle\caches\8.12\transforms\12201c6af7810ac7a9379c211b302296\transformed\jetified-relinker-1.4.5\jars\classes.jar"
@@ -617,19 +640,6 @@
       externalAnnotations="annotations.zip"
       proguardRules="proguard.txt"/>
   <library
-      name="androidx.interpolator:interpolator:1.0.0@aar"
-      jars="D:\.gradle\caches\8.12\transforms\0cdb589612fc9e4a5cb67ff50e71ddbb\transformed\interpolator-1.0.0\jars\classes.jar"
-      resolved="androidx.interpolator:interpolator:1.0.0"
-      folder="D:\.gradle\caches\8.12\transforms\0cdb589612fc9e4a5cb67ff50e71ddbb\transformed\interpolator-1.0.0"
-      manifest="AndroidManifest.xml"
-      resFolder="res"
-      assetsFolder="assets"
-      lintJar="lint.jar"
-      publicResources="public.txt"
-      symbolFile="R.txt"
-      externalAnnotations="annotations.zip"
-      proguardRules="proguard.txt"/>
-  <library
       name="androidx.profileinstaller:profileinstaller:1.3.1@aar"
       jars="D:\.gradle\caches\8.12\transforms\2a940ae05ff5ac1a61e4e6f47fa5d4a7\transformed\jetified-profileinstaller-1.3.1\jars\classes.jar"
       resolved="androidx.profileinstaller:profileinstaller:1.3.1"
@@ -647,6 +657,19 @@
       jars="D:\.gradle\caches\8.12\transforms\71a3e1a136b9a9bbb421898731d2aca2\transformed\exifinterface-1.3.6\jars\classes.jar"
       resolved="androidx.exifinterface:exifinterface:1.3.6"
       folder="D:\.gradle\caches\8.12\transforms\71a3e1a136b9a9bbb421898731d2aca2\transformed\exifinterface-1.3.6"
+      manifest="AndroidManifest.xml"
+      resFolder="res"
+      assetsFolder="assets"
+      lintJar="lint.jar"
+      publicResources="public.txt"
+      symbolFile="R.txt"
+      externalAnnotations="annotations.zip"
+      proguardRules="proguard.txt"/>
+  <library
+      name="androidx.interpolator:interpolator:1.0.0@aar"
+      jars="D:\.gradle\caches\8.12\transforms\0cdb589612fc9e4a5cb67ff50e71ddbb\transformed\interpolator-1.0.0\jars\classes.jar"
+      resolved="androidx.interpolator:interpolator:1.0.0"
+      folder="D:\.gradle\caches\8.12\transforms\0cdb589612fc9e4a5cb67ff50e71ddbb\transformed\interpolator-1.0.0"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"

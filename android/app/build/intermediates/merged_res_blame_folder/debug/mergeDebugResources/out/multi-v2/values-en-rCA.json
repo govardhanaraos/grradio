@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.radio.grradio.app-mergeDebugResources-32:/values-en-rCA/values-en-rCA.xml",
+            "outputFile": "com.radio.grradio.app-mergeDebugResources-34:/values-en-rCA/values-en-rCA.xml",
             "map": [
                 {
-                    "source": "D:\\.gradle\\caches\\8.12\\transforms\\80328e144fd3ca5b3565930e737c9c7b\\transformed\\core-1.13.1\\res\\values-en-rCA\\values-en-rCA.xml",
+                    "source": "D:\\.gradle\\caches\\8.12\\transforms\\6d8395e26a4078fbcc07fb292e5286fb\\transformed\\core-1.16.0\\res\\values-en-rCA\\values-en-rCA.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",
