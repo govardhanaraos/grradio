@@ -3,6 +3,10 @@ import 'dart:async'; // 💡 FIX: Import needed for StreamSubscription
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:grradio/ads/ad_helper.dart';
+import 'package:grradio/ads/banner_ad_widget.dart';
+import 'package:grradio/ads/insterstitialadmanager.dart';
+import 'package:grradio/ads/rewardedads.dart';
 import 'package:grradio/main.dart';
 import 'package:grradio/radioplayerhandler.dart';
 import 'package:grradio/radiostation.dart';
@@ -33,8 +37,13 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   bool _isRecording = false;
   bool _isPlayerExpanded = false;
 
+  double? _draggedHeight; // Null means use the standard expandedHeight
+
   // 💡 FIX: Store the subscription for proper disposal
   StreamSubscription? _customEventSubscription;
+
+  final InterstitialAdManager _interstitialAdManager = InterstitialAdManager();
+  final RewardedAdManager _rewardedAdManager = RewardedAdManager();
 
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -42,6 +51,12 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   @override
   void initState() {
     super.initState();
+    _interstitialAdManager.loadInterstitialAd();
+    _rewardedAdManager.loadRewardedAd();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showInterstitialAfterDelay();
+    });
     _audioHandler = globalAudioHandler;
 
     _animationController = AnimationController(
@@ -75,6 +90,22 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     });
 
     _searchController.addListener(_updateSearchQuery);
+    AdHelper.loadRewardedAd();
+  }
+
+  void _showInterstitialAfterDelay() {
+    Future.delayed(Duration(seconds: 30), () {
+      _interstitialAdManager.showInterstitialAd();
+    });
+  }
+
+  void _showRewardedAdForRecording() {
+    _rewardedAdManager.showRewardedAd(
+      onReward: (reward) {
+        // Grant user extra recording time or features
+        _showSnackbar('Reward earned', Colors.green);
+      },
+    );
   }
 
   @override
@@ -84,6 +115,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     _searchController.dispose();
     // 💡 FIX: Cancel the subscription
     _customEventSubscription?.cancel();
+    _interstitialAdManager.dispose();
+    _rewardedAdManager.dispose();
     super.dispose();
   }
 
@@ -224,29 +257,17 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                   fontWeight: FontWeight.bold,
                 ),
               ),
-        flexibleSpace: AnimatedBuilder(
-          animation: _animation,
-          builder: (context, child) {
-            return Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.red,
-                    Colors.orange,
-                    Colors.yellow,
-                    Colors.green,
-                    Colors.blue,
-                    Colors.indigo,
-                    Colors.purple,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  // Optional: Add some animation to the gradient
-                  transform: GradientRotation(_animation.value * 3.14 * 2),
-                ),
-              ),
-            );
-          },
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFF1976D2), // Primary Blue for Radio tab
+                Color(0xFF42A5F5), // Light Blue
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -286,34 +307,87 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
               ),
               onPressed: _isSearching ? _closeSearch : _openSearch,
             ),
+          IconButton(
+            icon: const Icon(Icons.star, color: Colors.yellow),
+            tooltip: 'Watch Ad for Reward',
+            onPressed: () => _showRewardedAdForReward(),
+          ),
         ],
       ),
-      body: Column(children: [Expanded(child: _buildStationsList())]),
+      body: Column(
+        children: [
+          Expanded(child: _buildStationsList()),
+          BannerAdWidget(),
+        ],
+      ),
       // Bottom player sheet
       bottomSheet: _buildPlayerSheet(),
     );
   }
 
+  // ... inside _RadioPlayerScreenState
+
+  // 💡 NEW: Logic to show Rewarded Ad
+  void _showRewardedAdForReward() {
+    AdHelper.showRewardedAd(
+      // Callback if the user successfully watches the ad
+      onUserEarnedReward: (rewardItem) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'REWARD GRANTED: ${rewardItem.amount} ${rewardItem.type}!',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Implement logic to actually grant the reward here
+        // For example: increase user points, grant temporary premium access, etc.
+      },
+      // Callback if the ad fails to load or show
+      onAdFailed: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ad not ready. Try again in a moment.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      },
+    );
+  }
+
+  // ...
   Widget _buildPlayerSheet() {
     return StreamBuilder<MediaItem?>(
       stream: _audioHandler.mediaItem,
       builder: (context, snapshot) {
         final mediaItem = snapshot.data;
+        final isExpanded = _isPlayerExpanded ?? false;
 
         if (mediaItem == null) {
           return const SizedBox.shrink();
         }
 
+        final screenHeight = MediaQuery.of(context).size.height;
+        final double expandedHeight = screenHeight * 0.80;
+        final double miniHeight = RButton.getLargeButtonSize();
+        final double cornerRadius = 20.0;
+
+        // Determine the current height for the container.
+        // Use _draggedHeight during expansion/drag, or the fixed expanded/mini height.
+        final currentHeight = isExpanded
+            ? _draggedHeight ?? expandedHeight
+            : miniHeight;
+        // NOTE: _draggedHeight must be a state variable initialized to expandedHeight
+        // when the player first expands.
+
         return AnimatedContainer(
           duration: Duration(milliseconds: 300),
-          height: _isPlayerExpanded
-              ? MediaQuery.of(context).size.height * 0.7
-              : RButton.getLargeButtonSize(),
+          height: currentHeight, // Use the dynamic currentHeight
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Colors.grey[200],
             borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(_isPlayerExpanded ? 20 : 0),
-              topRight: Radius.circular(_isPlayerExpanded ? 20 : 0),
+              topLeft: Radius.circular(isExpanded ? cornerRadius : 12),
+              topRight: Radius.circular(isExpanded ? cornerRadius : 12),
             ),
             boxShadow: [
               BoxShadow(
@@ -323,256 +397,410 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
               ),
             ],
           ),
-          child: _isPlayerExpanded
-              ? _buildExpandedPlayer(mediaItem)
-              : _buildMiniPlayer(mediaItem),
+          child: GestureDetector(
+            onVerticalDragUpdate: isExpanded
+                ? (details) {
+                    // --- START: Drag Animation Logic ---
+                    // Calculate new height by subtracting the vertical drag delta (downwards drag is positive delta.dy)
+
+                    final rawNewHeight = currentHeight - details.delta.dy;
+
+                    // 1. 🛑 CLAMP THE HEIGHT TO PREVENT NEGATIVE CONSTRAINTS 🛑
+                    final clampedNewHeight = rawNewHeight.clamp(
+                      miniHeight,
+                      expandedHeight,
+                    );
+
+                    // Update the state variable to trigger the sheet redraw
+                    // You need to call setState in the parent widget here:
+                    /* setState(() {
+                    _draggedHeight = newHeight.clamp(miniHeight, expandedHeight);
+                  });
+                  */
+                    // --- END: Drag Animation Logic ---
+                  }
+                : null,
+
+            onVerticalDragEnd: isExpanded
+                ? (details) {
+                    // --- START: Drag Dismissal Logic ---
+                    final double dragThreshold =
+                        expandedHeight * 0.5; // Dismiss if dragged past 50%
+                    final double velocityThreshold =
+                        500; // Dismiss if swiped fast
+
+                    if (currentHeight < dragThreshold ||
+                        details.primaryVelocity! > velocityThreshold) {
+                      // 1. If dragged past threshold OR swiped fast downwards: Minimize
+                      _minimizePlayer();
+
+                      // 2. You must reset _draggedHeight here to null or expandedHeight
+                      setState(() {
+                        _draggedHeight = null;
+                      });
+                    } else {
+                      // If not minimized, snap back to full expansion
+                      setState(() {
+                        _draggedHeight = expandedHeight;
+                      });
+                    }
+                    // --- END: Drag Dismissal Logic ---
+                  }
+                : null,
+
+            onTap: isExpanded
+                ? null
+                : () {
+                    // Your logic here to set _isPlayerExpanded = true
+                  },
+
+            child: isExpanded
+                ? _buildExpandedPlayer(mediaItem)
+                : _buildMiniPlayer(mediaItem),
+          ),
         );
       },
     );
   }
 
   Widget _buildExpandedPlayer(MediaItem mediaItem) {
-    return Column(
-      children: [
-        // Header with minimize button
-        Container(
-          height: RButton.getMediumButtonSize(),
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Text(
-                'Now Playing',
-                style: TextStyle(
-                  fontSize: RButton.getMediumFontSize(),
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blueGrey,
-                ),
-              ),
-              Spacer(),
-              IconButton(
-                icon: Icon(Icons.minimize, color: Colors.blueGrey),
-                onPressed: _minimizePlayer,
-              ),
-            ],
-          ),
+    return Container(
+      // Use a Container for the full screen/available space background
+      //color: Colors.grey[100], // Choose a background color
+      decoration: const BoxDecoration(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
         ),
-        Divider(height: 1),
-
-        // Station image and info
-        Expanded(
-          flex: 3,
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+      ),
+      child: Column(
+        children: [
+          // Header with minimize button
+          Container(
+            height: RButton.getMediumButtonSize(),
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
               children: [
-                Container(
-                  width: RButton.getXXLargeImageSize(),
-                  height: RButton.getXXLargeImageSize(),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: RButton.getXLargeSpacing(),
-                        offset: Offset(0, 4),
+                Text(
+                  'Now Playing',
+                  style: TextStyle(
+                    fontSize: RButton.getMediumFontSize(),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueGrey[800], // Darker text color
+                  ),
+                ),
+                Spacer(),
+                IconButton(
+                  icon: Icon(
+                    Icons.keyboard_arrow_down,
+                    color: Colors.blueGrey[600],
+                    size: RButton.getMediumFontSize() * 1.5,
+                  ), // Changed icon to a down arrow for minimize/collapse
+                  onPressed: _minimizePlayer,
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: Colors.blueGrey[100]), // Lighter divider
+          // Station image and info
+          Expanded(
+            flex: 3,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                10,
+                20,
+                10,
+              ), // Reduced top/bottom padding
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width:
+                        RButton.getXXLargeImageSize() *
+                        1.1, // Slightly larger image
+                    height: RButton.getXXLargeImageSize() * 1.1,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20), // Sharper radius
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black38, // Slightly stronger shadow
+                          blurRadius: RButton.getXLargeSpacing() * 1.5,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: mediaItem.artUri != null
+                          ? Image.network(
+                              mediaItem.artUri.toString(),
+                              fit: BoxFit.cover,
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return Center(
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.0,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.blueAccent,
+                                            ), // Color for indicator
+                                        value:
+                                            loadingProgress
+                                                    .expectedTotalBytes !=
+                                                null
+                                            ? loadingProgress
+                                                      .cumulativeBytesLoaded /
+                                                  loadingProgress
+                                                      .expectedTotalBytes!
+                                            : null,
+                                      ),
+                                    );
+                                  },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: Colors
+                                      .blueGrey[200], // Slightly darker error background
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.radio,
+                                      size: RButton.getMediumContainerSize(),
+                                      color: Colors.blueGrey[400],
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                          : Container(
+                              color: Colors.blueGrey[200],
+                              child: Center(
+                                child: Icon(
+                                  Icons.radio,
+                                  size: RButton.getMediumContainerSize(),
+                                  color: Colors.blueGrey[400],
+                                ),
+                              ),
+                            ),
+                    ),
+                  ),
+                  SizedBox(
+                    height: RButton.getXLargeSpacing(),
+                  ), // Increased spacing
+                  Text(
+                    mediaItem.title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize:
+                          RButton.getLargeFontSize() * 1.2, // Larger title font
+                      fontWeight: FontWeight.w900, // Extra bold
+                      color: Colors.blueGrey[900],
+                    ),
+                  ),
+                  SizedBox(height: RButton.getSmallSpacing()),
+                  Text(
+                    mediaItem.genre ?? 'Radio Stream',
+                    style: TextStyle(
+                      fontSize:
+                          RButton.getMediumFontSize(), // Slightly larger genre font
+                      color: Colors.grey[500],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Controls section
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: EdgeInsets.all(30), // Increased padding
+              child: Column(
+                mainAxisAlignment:
+                    MainAxisAlignment.start, // Align to top of section
+                children: [
+                  // Control buttons
+                  StreamBuilder<PlaybackState>(
+                    stream: _audioHandler.playbackState,
+                    builder: (context, snapshot) {
+                      final playing = snapshot.data?.playing ?? false;
+                      final processingState = snapshot.data?.processingState;
+                      final isLoading =
+                          processingState ==
+                          AudioProcessingState
+                              .loading; // Consider connecting as loading
+
+                      // *** Beautiful Controls Redesign ***
+                      final Color primaryControlColor =
+                          Colors.deepOrangeAccent; // Eye-catching color
+                      final Color secondaryControlColor = Colors
+                          .deepOrange[50]!; // Light background for side buttons
+                      final double mainButtonSize =
+                          RButton.getMainControlButtonSize();
+
+                      Widget _buildBeautifulControlButton({
+                        required IconData icon,
+                        required VoidCallback? onPressed,
+                        required double size,
+                        required double iconSize,
+                        required Color backgroundColor,
+                        required Color iconColor,
+                      }) {
+                        return Container(
+                          width: size,
+                          height: size,
+                          decoration: BoxDecoration(
+                            color: backgroundColor,
+                            shape: BoxShape.circle,
+                            boxShadow: onPressed != null
+                                ? [
+                                    BoxShadow(
+                                      color: backgroundColor.withOpacity(0.5),
+                                      blurRadius: 10,
+                                      offset: Offset(0, 5),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: IconButton(
+                            icon: Icon(icon),
+                            iconSize: iconSize,
+                            color: iconColor,
+                            onPressed: onPressed,
+                            padding: EdgeInsets.zero,
+                          ),
+                        );
+                      }
+                      // *** End of Helper Function ***
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Previous button
+                          _buildBeautifulControlButton(
+                            icon: Icons.skip_previous_rounded,
+                            onPressed: _isRecording
+                                ? null
+                                : _audioHandler.skipToPrevious,
+                            size: mainButtonSize * 0.6,
+                            iconSize: mainButtonSize * 0.4,
+                            backgroundColor: secondaryControlColor,
+                            iconColor: primaryControlColor,
+                          ),
+
+                          SizedBox(
+                            width: RButton.getXXLargeSpacing(),
+                          ), // Increased spacing
+                          // Play/Pause button
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              if (isLoading)
+                                SizedBox(
+                                  width: mainButtonSize,
+                                  height: mainButtonSize,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 4,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      primaryControlColor.withOpacity(0.5),
+                                    ),
+                                  ),
+                                ),
+                              _buildBeautifulControlButton(
+                                icon: playing
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                size:
+                                    mainButtonSize *
+                                    0.8, // Main button is slightly larger
+                                iconSize: mainButtonSize * 0.5,
+                                onPressed: _isRecording
+                                    ? null
+                                    : (playing
+                                          ? _audioHandler.pause
+                                          : _audioHandler.play),
+                                backgroundColor: primaryControlColor,
+                                iconColor:
+                                    Colors.white, // White icon for contrast
+                              ),
+                            ],
+                          ),
+
+                          SizedBox(
+                            width: RButton.getXXLargeSpacing(),
+                          ), // Increased spacing
+                          // Next button
+                          _buildBeautifulControlButton(
+                            icon: Icons.skip_next_rounded,
+                            onPressed: _isRecording
+                                ? null
+                                : _audioHandler.skipToNext,
+                            size: mainButtonSize * 0.6,
+                            iconSize: mainButtonSize * 0.4,
+                            backgroundColor: secondaryControlColor,
+                            iconColor: primaryControlColor,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+
+                  SizedBox(
+                    height: RButton.getXXLargeSpacing() * 1.5,
+                  ), // Increased spacing
+                  // Recording and additional buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Record button
+                      _buildActionButton(
+                        icon: _isRecording
+                            ? Icons
+                                  .stop_rounded // Changed icon for a softer look
+                            : Icons.fiber_manual_record_rounded,
+                        label: _isRecording ? 'Stop Recording' : 'Record',
+                        color: _isRecording
+                            ? Colors.redAccent
+                            : Colors.blueGrey, // RedAccent for stop
+                        onPressed: _toggleRecording,
+                      ),
+
+                      // Open recordings button
+                      _buildActionButton(
+                        icon: CupertinoIcons.recordingtape,
+                        label: 'Recordings',
+                        color: _isRecording ? Colors.grey : Colors.blueGrey,
+                        onPressed: _isRecording
+                            ? () {
+                                // 💡 FIX: If recording is in progress, block the action and show a message
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Cannot switch to MP3 Player while radio recording is active.',
+                                    ),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            : () async {
+                                await _audioHandler.pause();
+
+                                // 💡 FIX: Use the dedicated navigation callback for Recordings
+                                widget.onNavigateToRecordings();
+                              },
                       ),
                     ],
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15),
-                    child: mediaItem.artUri != null
-                        ? Image.network(
-                            mediaItem.artUri.toString(),
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.0,
-                                  value:
-                                      loadingProgress.expectedTotalBytes != null
-                                      ? loadingProgress.cumulativeBytesLoaded /
-                                            loadingProgress.expectedTotalBytes!
-                                      : null,
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.blueGrey[100],
-                                child: Center(
-                                  child: Icon(
-                                    Icons.radio,
-                                    size: RButton.getMediumContainerSize(),
-                                    color: Colors.blueGrey[300],
-                                  ),
-                                ),
-                              );
-                            },
-                          )
-                        : Container(
-                            color: Colors.blueGrey[100],
-                            child: Center(
-                              child: Icon(
-                                Icons.radio,
-                                size: RButton.getMediumContainerSize(),
-                                color: Colors.blueGrey[300],
-                              ),
-                            ),
-                          ),
-                  ),
-                ),
-                SizedBox(height: RButton.getMediumSpacing()),
-                Text(
-                  mediaItem.title,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: RButton.getLargeFontSize(),
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blueGrey[800],
-                  ),
-                ),
-                SizedBox(height: RButton.getSmallSpacing()),
-                Text(
-                  mediaItem.genre ?? 'Radio Stream',
-                  style: TextStyle(
-                    fontSize: RButton.getSmallFontSize(),
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-
-        // Controls section
-        Expanded(
-          flex: 2,
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Control buttons
-                StreamBuilder<PlaybackState>(
-                  stream: _audioHandler.playbackState,
-                  builder: (context, snapshot) {
-                    final playing = snapshot.data?.playing ?? false;
-                    final processingState = snapshot.data?.processingState;
-                    final isLoading =
-                        processingState == AudioProcessingState.loading;
-
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Previous button
-                        _buildControlButton(
-                          icon: Icons.skip_previous,
-                          onPressed: _isRecording
-                              ? null
-                              : _audioHandler.skipToPrevious,
-                          width: RButton.getControlButtonSize() * 0.8,
-                          height: RButton.getControlButtonSize() * 0.8,
-                          iconSize: RButton.getControlIconSize() * 0.8,
-                          backgroundcolor: Colors.brown[100]!,
-                        ),
-
-                        SizedBox(width: RButton.getXLargeSpacing()),
-
-                        // Play/Pause button
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            if (isLoading)
-                              SizedBox(
-                                width: RButton.getMainControlButtonSize(),
-                                height: RButton.getMainControlButtonSize(),
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 3,
-                                  color: Colors.blueAccent,
-                                ),
-                              ),
-                            _buildControlButton(
-                              icon: playing ? Icons.pause : Icons.play_arrow,
-                              width: RButton.getMainControlButtonSize() * 0.8,
-                              height: RButton.getMainControlButtonSize() * 0.8,
-                              iconSize: RButton.getMainControlIconSize() * 0.8,
-                              onPressed: _isRecording
-                                  ? null
-                                  : (playing
-                                        ? _audioHandler.pause
-                                        : _audioHandler.play),
-                              backgroundcolor: Colors.brown[100]!,
-                            ),
-                          ],
-                        ),
-
-                        SizedBox(width: RButton.getXLargeSpacing()),
-
-                        // Next button
-                        _buildControlButton(
-                          icon: Icons.skip_next,
-                          onPressed: _isRecording
-                              ? null
-                              : _audioHandler.skipToNext,
-                          width: RButton.getControlButtonSize() * 0.8,
-                          height: RButton.getControlButtonSize() * 0.8,
-                          iconSize: RButton.getControlButtonSize() * 0.8,
-                          backgroundcolor: Colors.brown[100]!,
-                        ),
-                      ],
-                    );
-                  },
-                ),
-
-                SizedBox(height: RButton.getXLargeSpacing()),
-
-                // Recording and additional buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    // Record button
-                    _buildActionButton(
-                      icon: _isRecording
-                          ? Icons.stop
-                          : Icons.fiber_manual_record,
-                      label: _isRecording ? 'Stop Recording' : 'Record',
-                      color: _isRecording ? Colors.red : Colors.blueGrey,
-                      onPressed: _toggleRecording,
-                    ),
-
-                    // Open recordings button
-                    _buildActionButton(
-                      icon: CupertinoIcons.recordingtape,
-                      label: 'Recordings',
-                      color: _isRecording ? Colors.grey : Colors.blueGrey,
-                      onPressed: _isRecording
-                          ? () {
-                              // 💡 FIX: If recording is in progress, block the action and show a message
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Cannot switch to MP3 Player while radio recording is active.',
-                                  ),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            }
-                          : () async {
-                              await _audioHandler.pause();
-
-                              // 💡 FIX: Use the dedicated navigation callback for Recordings
-                              widget.onNavigateToRecordings();
-                            },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -791,12 +1019,20 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
             final isPlaying = currentMediaId == station.id;
 
             return ListTile(
-              title: Text(station.name),
+              title: Text(
+                station.name,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: RButton.getSmallFontSize(),
+                  color: Colors.blueGrey[800],
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
               subtitle: Text(station.language ?? 'Radio Station'),
               leading: station.logoUrl != null
                   ? Container(
-                      width: RButton.getActionButtonSize(),
-                      height: RButton.getActionButtonSize(),
+                      width: RButton.getActionButtonSize() * 1.5,
+                      height: RButton.getActionButtonSize() * 1.5,
                       decoration: BoxDecoration(
                         color: Colors.grey[200],
                         borderRadius: BorderRadius.circular(8.0),

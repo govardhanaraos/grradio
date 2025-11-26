@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
+import 'package:grradio/ads/banner_ad_widget.dart';
 import 'package:grradio/main.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
@@ -30,6 +31,27 @@ class RecordingFile {
   });
 }
 
+// 💡 Model for downloaded MP3 files from Music folder
+class DownloadedMp3File {
+  final int id;
+  final String title;
+  final String path;
+  final int fileSizeInBytes;
+  final DateTime dateCreated;
+  final Duration duration;
+  final String? artist;
+
+  DownloadedMp3File({
+    required this.id,
+    required this.title,
+    required this.path,
+    required this.fileSizeInBytes,
+    required this.dateCreated,
+    required this.duration,
+    this.artist,
+  });
+}
+
 // 💡 Beautiful MP3 Player Screen - Fully Responsive
 class Mp3PlayerScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -39,11 +61,9 @@ class Mp3PlayerScreen extends StatefulWidget {
   _Mp3PlayerScreenState createState() => _Mp3PlayerScreenState();
 }
 
-// 💡 FIX: Removed TickerProviderStateMixin as it's not strictly necessary for this implementation
 class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     with TickerProviderStateMixin {
   final OnAudioQuery _audioQuery = OnAudioQuery();
-  //final AudioPlayer _mp3Player = AudioPlayer();
   late AudioPlayer _mp3Player;
 
   late TabController _tabController;
@@ -51,34 +71,33 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
   bool _isCheckingPermission = true;
   SongModel? _currentSong;
   List<SongModel>? _songs;
+  List<DownloadedMp3File>? _downloadedMp3s; // New list for downloaded MP3s
   int _currentIndex = -1;
   LoopMode _loopMode = LoopMode.off;
 
-  // 💡 FIX: Added missing state variable
   bool _isPlayerExpanded = false;
   String? _recordingsPath;
 
-  List<RecordingFile>? _recordings; // List of recorded radio streams
-  bool _isCurrentListRecordings =
-      false; // Tracks which list the current song belongs to
+  List<RecordingFile>? _recordings;
+  bool _isCurrentListRecordings = false;
+  bool _isCurrentListDownloadedMp3s =
+      false; // Track if current song is from downloaded MP3s
 
   @override
   void initState() {
     super.initState();
     _mp3Player = globalMp3Player;
     _tabController = TabController(
-      length: 2, // Total number of tabs (Music and Recordings)
+      length: 3, // Updated: Added third tab for Downloaded MP3s
       vsync: this,
-      initialIndex: widget.initialTabIndex, // Use the passed index
+      initialIndex: widget.initialTabIndex,
     );
 
     _checkAndRequestPermissions();
-
     _setupPlayerListeners();
     _loadLocalRecordings();
   }
 
-  // Helper to format file size (e.g., 5.2 MB)
   String _formatBytes(int bytes, int decimals) {
     if (bytes <= 0) return "0 B";
     const suffixes = ["B", "KB", "MB", "GB", "TB"];
@@ -88,7 +107,6 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
         suffixes[i];
   }
 
-  // Helper to format duration (e.g., 00:05:23)
   String _formatDuration(Duration d) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
     String twoDigitMinutes = twoDigits(d.inMinutes.remainder(60));
@@ -97,12 +115,10 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
   }
 
   void _setupPlayerListeners() {
-    // Listen to player completion to auto-play next song
     _mp3Player.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) {
-        if (_isCurrentListRecordings) {
-          // When a recording finishes, stop and reset the current track state.
-          // This prevents the player from trying to auto-advance past the last item.
+        if (_isCurrentListRecordings || _isCurrentListDownloadedMp3s) {
+          // When a recording or downloaded MP3 finishes, stop and reset
           _mp3Player.stop();
           if (mounted) {
             setState(() {
@@ -110,12 +126,13 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                 _currentSong = null;
                 _currentIndex = -1;
               }
-              // Optionally, you might set the button icon to 'play' here
             });
           }
         }
 
-        if (_loopMode == LoopMode.off && !_isCurrentListRecordings) {
+        if (_loopMode == LoopMode.off &&
+            !_isCurrentListRecordings &&
+            !_isCurrentListDownloadedMp3s) {
           _playNext();
         }
       }
@@ -133,7 +150,6 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
   @override
   void dispose() {
     _tabController.dispose();
-    // _mp3Player.dispose();
     super.dispose();
   }
 
@@ -144,16 +160,13 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
 
     bool permissionGranted = false;
 
-    // For Android 13+ (API 33+), we need READ_MEDIA_AUDIO
     if (await Permission.audio.isGranted) {
       permissionGranted = true;
     } else {
-      // Request audio permission (Android 13+)
       final audioStatus = await Permission.audio.request();
       if (audioStatus.isGranted) {
         permissionGranted = true;
       } else {
-        // Fallback to storage permission for older Android versions
         final storageStatus = await Permission.storage.request();
         if (storageStatus.isGranted) {
           permissionGranted = true;
@@ -166,19 +179,17 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
       _isCheckingPermission = false;
     });
 
-    // Load songs after permission is granted
     if (permissionGranted) {
       _loadSongs();
     }
   }
 
-  // 💡 NEW: Orchestrator to load both all songs and recordings
   Future<void> _loadSongs() async {
     await _loadAllSongs();
     await _loadLocalRecordings();
+    await _loadDownloadedMp3s(); // Load downloaded MP3s
   }
 
-  // 💡 REFACTORED: Original logic for loading all songs (MediaStore)
   Future<void> _loadAllSongs() async {
     try {
       final songs = await _audioQuery.querySongs(
@@ -203,10 +214,98 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     }
   }
 
-  // 💡 FIX: Logic for loading recorded files from the app's internal download path
+  // 💡 NEW: Load downloaded MP3s from Music folder
+  Future<void> _loadDownloadedMp3s() async {
+    try {
+      // Get app documents directory
+      final appDir = await getApplicationDocumentsDirectory();
+      final musicDir = Directory('${appDir.path}/Music');
+
+      // Create Music directory if it doesn't exist
+      if (!await musicDir.exists()) {
+        await musicDir.create(recursive: true);
+      }
+
+      final tempPlayer = AudioPlayer();
+      final List<DownloadedMp3File> loadedMp3s = [];
+      int idCounter = 0;
+
+      // List all files in Music directory
+      final files = musicDir.listSync().where((f) {
+        final path = f.path.toLowerCase();
+        return path.endsWith('.mp3') ||
+            path.endsWith('.aac') ||
+            path.endsWith('.m4a');
+      }).toList();
+
+      for (final fileSystemEntity in files) {
+        if (fileSystemEntity is File) {
+          final File file = fileSystemEntity;
+          final stat = file.statSync();
+          final fileSize = stat.size;
+          final dateCreated = stat.changed;
+
+          // Extract filename without extension
+          String fileName = file.uri.pathSegments.last;
+          String title = fileName;
+          if (fileName.contains('.')) {
+            title = fileName.substring(0, fileName.lastIndexOf('.'));
+          }
+
+          // Try to extract artist from filename (format: Artist - Title.mp3)
+          String? artist;
+          if (title.contains(' - ')) {
+            final parts = title.split(' - ');
+            if (parts.length >= 2) {
+              artist = parts[0];
+              title = parts.sublist(1).join(' - ');
+            }
+          }
+
+          // Get duration
+          Duration duration = Duration.zero;
+          try {
+            final result = await tempPlayer.setFilePath(file.path);
+            duration = result ?? Duration.zero;
+          } catch (e) {
+            print("Could not get duration for ${file.path}: $e");
+          }
+
+          loadedMp3s.add(
+            DownloadedMp3File(
+              id: idCounter++,
+              title: title,
+              path: file.path,
+              fileSizeInBytes: fileSize,
+              dateCreated: dateCreated,
+              duration: duration,
+              artist: artist,
+            ),
+          );
+        }
+      }
+
+      // Sort by date created (newest first)
+      loadedMp3s.sort((a, b) => b.dateCreated.compareTo(a.dateCreated));
+
+      if (mounted) {
+        setState(() {
+          _downloadedMp3s = loadedMp3s;
+        });
+      }
+
+      await tempPlayer.dispose();
+    } catch (e) {
+      print('Error loading downloaded MP3s: $e');
+      if (mounted) {
+        setState(() {
+          _downloadedMp3s = [];
+        });
+      }
+    }
+  }
 
   Future<void> _loadLocalRecordings() async {
-    // ... (Directory determination logic remains the same) ...
     Directory? directory;
     final externalDirectories = await getExternalStorageDirectories(
       type: StorageDirectory.downloads,
@@ -225,13 +324,11 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
       return;
     }
 
-    // 💡 NEW: Use a temporary AudioPlayer for duration metadata
     final tempPlayer = AudioPlayer();
     final List<RecordingFile> loadedRecordings = [];
     int idCounter = 0;
 
     try {
-      // Filter for common audio file extensions
       final files = directory
           .listSync()
           .where(
@@ -246,14 +343,10 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
       for (final fileSystemEntity in files) {
         if (fileSystemEntity is File) {
           final File file = fileSystemEntity;
-
-          // --- 1. Get File Stats (Size and Date) ---
           final stat = file.statSync();
           final fileSize = stat.size;
-          // Use `stat.changed` or `stat.modified` depending on your needs. `changed` is often safer.
           final dateCreated = stat.changed;
 
-          // --- 2. Get Duration using just_audio ---
           Duration duration = Duration.zero;
           try {
             final result = await tempPlayer.setFilePath(file.path);
@@ -262,8 +355,6 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
             print("Could not get duration for ${file.path}: $e");
           }
 
-          // --- 3. Extract Name ---
-          // Assuming file name format is 'Title_Timestamp.ext'
           String fileName = file.uri.pathSegments.last;
           String title = fileName.split('_').first;
           if (title.isEmpty) {
@@ -285,7 +376,6 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     } catch (e) {
       print('Error loading local recordings: $e');
     } finally {
-      // 💡 IMPORTANT: Dispose of the temporary player
       await tempPlayer.dispose();
     }
 
@@ -298,13 +388,13 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     }
   }
 
-  // 💡 REFACTORED: Unified method to play media (SongModel or RecordingFile)
+  // 💡 UPDATED: Unified method to play media from all sources
   void _playMedia({
     required dynamic media,
     required int index,
     required bool isRecording,
+    required bool isDownloadedMp3,
   }) async {
-    // 1. Determine Title, Path, and a unique ID for the player state
     String title;
     String filePath;
     int id;
@@ -318,6 +408,13 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
       id = rec.id;
       artist = 'Recording';
       artUri = Uri.parse('file:///recording_placeholder_art');
+    } else if (isDownloadedMp3) {
+      final mp3 = media as DownloadedMp3File;
+      title = mp3.title;
+      filePath = mp3.path;
+      id = mp3.id;
+      artist = mp3.artist ?? 'Unknown Artist';
+      artUri = Uri.parse('file:///downloaded_mp3_placeholder_art');
     } else {
       final song = media as SongModel;
       title = song.title;
@@ -330,16 +427,14 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     }
     print("artist :$artist,title:$title,filePath:$filePath");
     final SongModel newCurrentSong;
-    // 2. Check if already playing the same file (using the file's ID)
+
     if (_currentSong?.id == id && _mp3Player.playing) {
       await _mp3Player.pause();
     } else if (_currentSong?.id == id) {
       await _mp3Player.play();
     } else {
-      // 3. Create a pseudo-SongModel for the UI (MiniPlayer/Sheet)
-      // This is necessary because _currentSong is defined as SongModel.
-      if (isRecording) {
-        // If it's a recording, create a new "pseudo" SongModel for the UI
+      if (isRecording || isDownloadedMp3) {
+        // Create pseudo-SongModel for recordings and downloaded MP3s
         final Map<String, dynamic> songData = {
           '_id': id,
           'title': title,
@@ -350,20 +445,19 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
         };
         newCurrentSong = SongModel(songData);
       } else {
-        // If it's a regular MP3, just use the one we already have!
         newCurrentSong = media as SongModel;
       }
 
-      // 4. Update state for playback
       setState(() {
         _currentSong = newCurrentSong;
         _currentIndex = index;
         _isCurrentListRecordings = isRecording;
+        _isCurrentListDownloadedMp3s = isDownloadedMp3;
       });
-      print("File(filePath)");
+
+      print("Playing file: $filePath");
       try {
         final file = File(filePath);
-
         if (!await file.exists()) {
           throw Exception('File not found at path: $filePath');
         }
@@ -373,16 +467,14 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
         if (fileLength < 1024) {
           throw Exception('File is corrupt or too small: $fileLength bytes');
         }
-        // 💡 FIX: Use setAudioSource with Uri.file for robust local file playback
+
         await _mp3Player.setAudioSource(
           AudioSource.uri(
-            // Use Uri.file to ensure the path is correctly formatted as a file URI
             Uri.file(filePath),
             tag: MediaItem(
               id: id.toString(),
               title: title,
               artist: artist,
-              // Use the determined art URI
               artUri: artUri,
               duration: newCurrentSong.duration == null
                   ? null
@@ -394,7 +486,6 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
         await _mp3Player.play();
         _showPlayerSheet();
       } catch (e) {
-        // Print the exact error and path for clear debugging
         print("Error playing local file: $e. Path used: $filePath");
         ScaffoldMessenger.of(
           context,
@@ -405,7 +496,15 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
   }
 
   void _playNext() {
-    final list = _isCurrentListRecordings ? _recordings : _songs;
+    List? list;
+    if (_isCurrentListRecordings) {
+      list = _recordings;
+    } else if (_isCurrentListDownloadedMp3s) {
+      list = _downloadedMp3s;
+    } else {
+      list = _songs;
+    }
+
     if (list == null || list.isEmpty) return;
 
     int nextIndex = (_currentIndex + 1) % list.length;
@@ -415,11 +514,20 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
       media: nextMedia,
       index: nextIndex,
       isRecording: _isCurrentListRecordings,
+      isDownloadedMp3: _isCurrentListDownloadedMp3s,
     );
   }
 
   void _playPrevious() {
-    final list = _isCurrentListRecordings ? _recordings : _songs;
+    List? list;
+    if (_isCurrentListRecordings) {
+      list = _recordings;
+    } else if (_isCurrentListDownloadedMp3s) {
+      list = _downloadedMp3s;
+    } else {
+      list = _songs;
+    }
+
     if (list == null || list.isEmpty) return;
 
     int prevIndex = (_currentIndex - 1 + list.length) % list.length;
@@ -429,10 +537,10 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
       media: prevMedia,
       index: prevIndex,
       isRecording: _isCurrentListRecordings,
+      isDownloadedMp3: _isCurrentListDownloadedMp3s,
     );
   }
 
-  // Toggle Shuffle and Loop Mode
   void _toggleLoopMode() {
     setState(() {
       switch (_loopMode) {
@@ -452,10 +560,8 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     });
   }
 
-  // 💡 FIX: Added state management for the modal sheet
   void _showPlayerSheet() {
-    // Avoid opening a second sheet if already expanded
-    if (_isPlayerExpanded == true) return;
+    if (_isPlayerExpanded) return;
 
     setState(() {
       _isPlayerExpanded = true;
@@ -469,7 +575,6 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
         return _buildPlayerSheet();
       },
     ).then((_) {
-      // 💡 FIX: Reset state when the modal is dismissed
       if (mounted) {
         setState(() {
           _isPlayerExpanded = false;
@@ -629,7 +734,7 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
   }
 
   // 3. Confirmation Dialog
-  Future<void> _confirmAndDelete(RecordingFile recording) async {
+  Future<void> _confirmAndDeleteOld(RecordingFile recording) async {
     final bool? shouldDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -661,6 +766,7 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
   Widget _buildSongList({
     required List? list,
     required bool isRecordingList,
+    required bool isDownloadedMp3List,
     required IconData emptyIcon,
     required String emptyTitle,
     required String emptySubtitle,
@@ -733,8 +839,6 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     final albumArtSize = screenWidth * 0.15;
     final cardPadding = screenWidth * 0.03;
     final titleFontSize = screenWidth * 0.04;
-
-    // 💡 FIX 1: Slightly reduced base font size for better fit on small screens
     final subtitleFontSize = screenWidth * 0.028;
     final trailingButtonSize = screenWidth * 0.1;
 
@@ -743,45 +847,37 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
       padding: EdgeInsets.symmetric(vertical: screenHeight * 0.01),
       itemBuilder: (context, index) {
         final media = list[index];
-        // Safely check if media is null before casting or accessing properties
         if (media == null) return const SizedBox.shrink();
 
-        final isMediaStore = !isRecordingList;
-        // NOTE: Casting is safe here because list is either List<SongModel> or List<RecordingFile>
-        final id = isRecordingList ? media.id : (media as SongModel).id;
-        final title = isRecordingList
-            ? media.title
-            : (media as SongModel).title;
+        final isMediaStore = !isRecordingList && !isDownloadedMp3List;
+        final id = isMediaStore ? (media as SongModel).id : media.id;
+        final title = isMediaStore ? (media as SongModel).title : media.title;
 
-        // 💡 FIX: Initialize all variables with default values before the checks
         String artistOrFileType = 'Unknown Type';
         String sizeDurationLine = 'Size: N/A | Duration: N/A';
         String dateLine = 'Date: N/A';
 
         if (isRecordingList && media is RecordingFile) {
-          // Recording File Logic
           artistOrFileType = 'Recording';
           sizeDurationLine =
               'Size: ${_formatBytes(media.fileSizeInBytes, 1)} | Duration: ${_formatDuration(media.duration)}';
           dateLine =
               'Created: ${DateFormat('MMM dd, yyyy HH:mm').format(media.dateCreated)}';
+        } else if (isDownloadedMp3List && media is DownloadedMp3File) {
+          artistOrFileType = media.artist ?? 'Downloaded MP3';
+          sizeDurationLine =
+              'Size: ${_formatBytes(media.fileSizeInBytes, 1)} | Duration: ${_formatDuration(media.duration)}';
+          dateLine =
+              'Downloaded: ${DateFormat('MMM dd, yyyy HH:mm').format(media.dateCreated)}';
         } else if (media is SongModel) {
-          // MP3 File (SongModel) Logic
           final SongModel song = media;
           artistOrFileType = song.artist ?? 'Unknown Artist';
-
-          // on_audio_query provides size (in bytes) and duration (in milliseconds)
           final sizeInBytes = song.size ?? 0;
           final durationMs = song.duration ?? 0;
-
-          // dateAdded is in seconds
-          // NOTE: song.dateAdded is nullable, use a fallback of 0
           final dateAddedSeconds = song.dateAdded ?? 0;
           final dateAdded = dateAddedSeconds > 0
               ? DateTime.fromMillisecondsSinceEpoch(dateAddedSeconds * 1000)
-              : DateTime.fromMillisecondsSinceEpoch(
-                  0,
-                ); // Fallback to epoch start
+              : DateTime.fromMillisecondsSinceEpoch(0);
 
           sizeDurationLine =
               'Size: ${_formatBytes(sizeInBytes, 1)} | Duration: ${_formatDuration(Duration(milliseconds: durationMs))}';
@@ -801,15 +897,14 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                 media: media,
                 index: index,
                 isRecording: isRecordingList,
+                isDownloadedMp3: isDownloadedMp3List,
               ),
               child: Container(
                 margin: EdgeInsets.symmetric(
                   horizontal: cardMargin,
                   vertical: cardMargin * 0.5,
                 ),
-                height:
-                    listItemHeight *
-                    1.5, // Increased height to fit two subtitle lines
+                height: listItemHeight * 1.5,
                 decoration: BoxDecoration(
                   color: isCurrentlyPlaying
                       ? Colors.blueGrey[50]
@@ -834,7 +929,6 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                       : [],
                 ),
                 child: ListTile(
-                  // Decreased vertical padding slightly due to increased subtitle lines
                   contentPadding: EdgeInsets.symmetric(
                     horizontal: cardPadding,
                     vertical: cardPadding * 0.1,
@@ -857,13 +951,13 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                                 nullArtworkWidget: _buildPlaceholderArt(
                                   screenWidth,
                                   albumArtSize,
-                                  isRecordingList,
+                                  isRecordingList || isDownloadedMp3List,
                                 ),
                               )
                             : _buildPlaceholderArt(
                                 screenWidth,
                                 albumArtSize,
-                                isRecordingList,
+                                isRecordingList || isDownloadedMp3List,
                               ),
                       ),
                     ),
@@ -885,11 +979,9 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                       ),
                     ),
                   ),
-                  // 💡 REFACTORED: Use a Column for subtitle to stack all details
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment
-                        .start, // Center the content vertically
+                    mainAxisAlignment: MainAxisAlignment.start,
                     children: [
                       const SizedBox(height: -2),
                       Text(
@@ -901,7 +993,7 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(height: 1), // Small separator
+                      const SizedBox(height: 1),
                       Text(
                         sizeDurationLine,
                         maxLines: 1,
@@ -921,14 +1013,14 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                       ),
                     ],
                   ),
-                  trailing: isRecordingList
+                  trailing: isRecordingList || isDownloadedMp3List
                       ? PopupMenuButton<String>(
                           onSelected: (value) {
-                            final selectedRecording = list[index];
+                            final selectedFile = list[index];
                             if (value == 'share') {
-                              _shareRecording(selectedRecording);
+                              _shareFile(selectedFile);
                             } else if (value == 'delete') {
-                              _confirmAndDelete(selectedRecording);
+                              _confirmAndDelete(selectedFile, isRecordingList);
                             }
                           },
                           itemBuilder: (BuildContext context) =>
@@ -960,7 +1052,7 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                               ],
                           icon: const Icon(Icons.more_vert),
                         )
-                      : (isCurrentlyPlaying // Your existing logic for music files
+                      : (isCurrentlyPlaying
                             ? const Icon(Icons.volume_up, color: Colors.blue)
                             : null),
                 ),
@@ -1374,13 +1466,127 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     );
   }
 
-  // --- BUILD METHOD START ---
+  // 💡 NEW: Unified file sharing
+  Future<void> _shareFile(dynamic file) async {
+    try {
+      String filePath;
+      String title;
+
+      if (file is RecordingFile) {
+        filePath = file.path;
+        title = file.title;
+      } else if (file is DownloadedMp3File) {
+        filePath = file.path;
+        title = file.title;
+      } else {
+        return;
+      }
+
+      final fileObj = File(filePath);
+      if (await fileObj.exists()) {
+        await Share.shareXFiles([
+          XFile(filePath),
+        ], subject: 'Check out: $title');
+      } else {
+        _showSnackBar("Error: File not found for sharing.");
+      }
+    } catch (e) {
+      print("Error sharing file: $e");
+      _showSnackBar("Error initiating share action.");
+    }
+  }
+
+  // 💡 UPDATED: Unified delete confirmation
+  Future<void> _confirmAndDelete(dynamic file, bool isRecording) async {
+    final bool? shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        final fileName = isRecording
+            ? (file as RecordingFile).title
+            : (file as DownloadedMp3File).title;
+        return AlertDialog(
+          title: const Text('Confirm Deletion'),
+          content: Text(
+            'Are you sure you want to delete "$fileName"? This cannot be undone.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            TextButton(
+              child: const Text('DELETE', style: TextStyle(color: Colors.red)),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete == true) {
+      _deleteFile(file, isRecording);
+    }
+  }
+
+  // 💡 UPDATED: Unified file deletion
+  Future<void> _deleteFile(dynamic file, bool isRecording) async {
+    try {
+      String filePath;
+      String title;
+
+      if (isRecording && file is RecordingFile) {
+        filePath = file.path;
+        title = file.title;
+      } else if (file is DownloadedMp3File) {
+        filePath = file.path;
+        title = file.title;
+      } else {
+        return;
+      }
+
+      final fileObj = File(filePath);
+      if (await fileObj.exists()) {
+        // Stop playback if this file is currently playing
+        if ((_isCurrentListRecordings && isRecording) ||
+            (_isCurrentListDownloadedMp3s && !isRecording)) {
+          if (_currentSong?.data == filePath) {
+            await _mp3Player.stop();
+            setState(() {
+              _currentSong = null;
+              _currentIndex = -1;
+            });
+          }
+        }
+
+        await fileObj.delete();
+        _showSnackBar("'$title' deleted successfully.");
+
+        // Reload the appropriate list
+        if (isRecording) {
+          _loadLocalRecordings();
+        } else {
+          _loadDownloadedMp3s();
+        }
+      } else {
+        _showSnackBar("Error: File not found at path.");
+      }
+    } catch (e) {
+      print("Error deleting file: $e");
+      _showSnackBar("Error deleting file.");
+    }
+  }
+
+  // Rest of the methods remain the same (_buildPlaceholderArt, _buildPermissionDenied,
+  // _showSnackBar, _buildMiniPlayer, _buildPlayerSheet, etc.)
+
+  // ... [Keep all the existing _buildPlaceholderArt, _buildPermissionDenied,
+  // _showSnackBar, _buildMiniPlayer, _buildPlayerSheet methods exactly as they are] ...
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    // Responsive sizing for main screen
     final appBarFontSize = screenWidth * 0.06;
     final iconSize = screenWidth * 0.06;
     final emptyIconSize = screenWidth * 0.2;
@@ -1390,7 +1596,7 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     final cardMargin = screenWidth * 0.03;
 
     return DefaultTabController(
-      length: 2,
+      length: 3, // Updated to 3 tabs
       child: Scaffold(
         appBar: AppBar(
           title: Text(
@@ -1401,6 +1607,18 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
               fontWeight: FontWeight.bold,
             ),
           ),
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF7B1FA2), // Deep Purple
+                  Color(0xFFBA68C8), // Light Purple
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
           backgroundColor: Colors.blueGrey[900],
           elevation: 0,
           actions: [
@@ -1409,7 +1627,7 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
               iconSize: iconSize,
               onPressed: () {
                 if (_hasPermission) {
-                  _loadSongs(); // Reloads both lists
+                  _loadSongs(); // Reloads all three lists
                 } else {
                   _checkAndRequestPermissions();
                 }
@@ -1426,6 +1644,7 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
             ),
             tabs: const [
               Tab(text: 'All Songs'),
+              Tab(text: 'Downloaded MP3s'), // New tab
               Tab(text: 'Recordings'),
             ],
             controller: _tabController,
@@ -1450,10 +1669,11 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                     child: TabBarView(
                       controller: _tabController,
                       children: [
-                        // 1. All Songs Tab
+                        // 1. All Songs Tab (MediaStore)
                         _buildSongList(
                           list: _songs,
                           isRecordingList: false,
+                          isDownloadedMp3List: false,
                           emptyIcon: Icons.music_off,
                           emptyTitle: 'No MP3 files found',
                           emptySubtitle: 'Add some music files to your device',
@@ -1467,10 +1687,30 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                           buttonPadding: buttonPadding,
                           iconSize: iconSize,
                         ),
-                        // 2. Recordings Tab
+                        // 2. Downloaded MP3s Tab (Music folder)
+                        _buildSongList(
+                          list: _downloadedMp3s,
+                          isRecordingList: false,
+                          isDownloadedMp3List: true,
+                          emptyIcon: Icons.download,
+                          emptyTitle: 'No Downloaded MP3s',
+                          emptySubtitle:
+                              'MP3s downloaded from Old MP3 browser will appear here',
+                          onRefresh: _loadDownloadedMp3s,
+                          screenWidth: screenWidth,
+                          screenHeight: screenHeight,
+                          cardMargin: cardMargin,
+                          emptyIconSize: emptyIconSize,
+                          emptyTitleSize: emptyTitleSize,
+                          emptySubtitleSize: emptySubtitleSize,
+                          buttonPadding: buttonPadding,
+                          iconSize: iconSize,
+                        ),
+                        // 3. Recordings Tab
                         _buildSongList(
                           list: _recordings,
                           isRecordingList: true,
+                          isDownloadedMp3List: false,
                           emptyIcon: Icons.mic_off,
                           emptyTitle: 'No Recordings Found',
                           emptySubtitle:
@@ -1488,8 +1728,13 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                       ],
                     ),
                   ),
-                  // Mini Player at Bottom
-                  // 💡 FIX: Check the expanded state to ensure the Mini Player is hidden when the sheet is open
+
+                  Container(
+                    alignment: Alignment.center,
+                    height:
+                        60, // A guaranteed height (50px is standard, use 60px for safety)
+                    child: BannerAdWidget(),
+                  ),
                   if (_currentSong != null && !_isPlayerExpanded)
                     _buildMiniPlayer(),
                 ],

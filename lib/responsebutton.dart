@@ -91,6 +91,7 @@ class RButton {
   static double getMediumSpacing() => getBaseSize() * 0.2; // ~11-13px
   static double getLargeSpacing() => getBaseSize() * 0.3; // ~16-19px
   static double getXLargeSpacing() => getBaseSize() * 0.4; // ~22-25px
+  static double getXXLargeSpacing() => getBaseSize() * 0.6; // ~22-25px
 
   // App Bar
   static double getAppBarHeight() => getBaseSize() * 1.1; // ~60-70px

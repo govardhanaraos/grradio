@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.radio.grradio.app-mergeReleaseResources-34:/values-night-v31/values-night-v31.xml",
+            "outputFile": "com.radio.grradio.app-mergeReleaseResources-49:/values-night-v31/values-night-v31.xml",
             "map": [
                 {
                     "source": "D:\\Flutter_projects\\Flutter_apps\\grradio\\android\\app\\src\\main\\res\\values-night-v31\\styles.xml",

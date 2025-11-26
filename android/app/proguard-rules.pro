@@ -22,3 +22,39 @@
 # Mongo dart rules
 -keep class com.mongodb.** { *; }
 -keepclassmembers class com.mongodb.** { *; }
+
+# Google Mobile Ads
+-keep class com.google.android.gms.ads.** { *; }
+-keep class com.google.ads.** { *; }
+-keep class com.google.android.gms.common.** { *; }
+
+# Mediation adapters
+-keep class com.google.ads.mediation.** { *; }
+-keep class * implements com.google.ads.mediation.MediationAdapter { *; }
+-keep class * implements com.google.ads.mediation.MediationBannerAdapter { *; }
+-keep class * implements com.google.ads.mediation.MediationInterstitialAdapter { *; }
+-keep class * implements com.google.ads.mediation.MediationNativeAdapter { *; }
+
+# For AppLovin mediation (if used)
+-keep class com.applovin.** { *; }
+
+# For Facebook mediation (if used)
+-keep class com.facebook.ads.** { *; }
+
+# Keep relevant data for analytics
+-keep class * extends java.util.ListResourceBundle {
+    protected Object[][] getContents();
+}
+
+-keep public class com.google.android.gms.common.internal.safeparcel.SafeParcelable {
+    public static final *** NULL;
+}
+
+-keepnames @com.google.android.gms.common.annotation.KeepName class *
+-keepclassmembernames class * {
+    @com.google.android.gms.common.annotation.KeepName *;
+}
+
+-keepnames class * implements android.os.Parcelable {
+    public static final ** CREATOR;
+}

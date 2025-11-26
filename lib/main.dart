@@ -2,12 +2,15 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:grradio/handler/mp3playerhandler.dart';
+import 'package:grradio/more/more.dart';
+import 'package:grradio/mp3download/mp3downloadscreen.dart'; // Add this import
 import 'package:grradio/mp3playerscreen.dart';
 import 'package:grradio/radio_station_service.dart';
 import 'package:grradio/radioplayerhandler.dart';
 import 'package:grradio/radioplayerscreen.dart';
 import 'package:grradio/radiostation.dart';
-import 'package:grradio/mp3downloadscreen.dart'; // Add this import
 import 'package:just_audio/just_audio.dart';
 
 final RadioStationService _radioService = RadioStationService();
@@ -27,6 +30,7 @@ Future<void> loadStations() async {
 // Global audio handlers
 late AudioHandler globalAudioHandler;
 late AudioPlayer globalMp3Player;
+late AudioHandler globalMp3QueuePlayer;
 
 // Audio coordination functions
 void pauseRadioIfPlaying() {
@@ -61,14 +65,7 @@ void setupAudioSession() async {
   );
 }
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  await loadStations();
-  print("allRadioStations:${allRadioStations}");
-  // Initialize audio service for radio
-
-  // Initialize audio session
+Future<void> _initAudioHandlers() async {
   setupAudioSession();
 
   // Initialize MP3 player
@@ -86,6 +83,34 @@ void main() async {
       preloadArtwork: true,
     ),
   );
+  // 💡 Initialize MP3 Queue Player Handler
+  globalMp3QueuePlayer = await AudioService.init(
+    builder: () => Mp3PlayerHandler(), // Use the new handler class
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.radio.grradio.mp3',
+      androidNotificationChannelName: 'MP3 Playback',
+      androidNotificationIcon: 'drawable/ic_bg_service_small',
+      androidNotificationOngoing: true,
+    ),
+  );
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    // Initialize Mobile Ads SDK
+    await MobileAds.instance.initialize();
+    print('✅ Google Mobile Ads initialized successfully');
+  } catch (e) {
+    print('❌ Failed to initialize Google Mobile Ads: $e');
+    // Continue with app initialization even if ads fail
+  }
+
+  await loadStations();
+  print("allRadioStations:${allRadioStations}");
+  // Initialize audio service for radio
+  await _initAudioHandlers();
 
   runApp(RadioApp());
 }
@@ -95,7 +120,22 @@ class RadioApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'GR Radio',
-      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: Colors.white,
+          elevation: 20,
+          selectedLabelStyle: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+          unselectedLabelStyle: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 11,
+          ),
+        ),
+      ),
       home: MainNavigator(),
     );
   }
@@ -136,7 +176,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     });
   }
 
-  // 💡 Define the screens for the navigation
+  // 💡 Define the screens for the navigation (now 4 items)
   List<Widget> get _widgetOptions => <Widget>[
     RadioPlayerScreen(
       onNavigateToMp3Tab: () => _onItemTapped(1),
@@ -148,6 +188,7 @@ class _MainNavigatorState extends State<MainNavigator> {
       initialTabIndex: _mp3SubTabIndex,
     ),
     Mp3DownloadScreen(), // New MP3 Download screen
+    MoreScreen(), // New More screen
   ];
 
   void _onItemTapped(int index) {
@@ -175,41 +216,177 @@ class _MainNavigatorState extends State<MainNavigator> {
     });
   }
 
+  // Custom Bottom Navigation Bar Item
+  Widget _buildCustomNavItem({
+    required int index,
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+  }) {
+    return Expanded(
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? _getItemColor(index).withOpacity(0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: isSelected
+              ? Border.all(
+                  color: _getItemColor(index).withOpacity(0.3),
+                  width: 1.5,
+                )
+              : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: _getItemColor(index).withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => _onItemTapped(index),
+            child: Container(
+              padding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon with gradient when selected
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: isSelected
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                _getItemColor(index),
+                                _getItemColor(index).withOpacity(0.7),
+                              ],
+                            )
+                          : null,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 20,
+                      color: isSelected ? Colors.white : Colors.grey.shade600,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      color: isSelected
+                          ? _getItemColor(index)
+                          : Colors.grey.shade600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Get color for each navigation item
+  Color _getItemColor(int index) {
+    switch (index) {
+      case 0: // FM Radio
+        return Colors.blue.shade700;
+      case 1: // MP3 Player
+        return Colors.purple.shade600;
+      case 2: // MP3 Download
+        return Colors.green.shade600;
+      case 3: // More
+        return Colors.orange.shade600;
+      default:
+        return Colors.blue.shade700;
+    }
+  }
+
+  // Get icon for each navigation item
+  IconData _getItemIcon(int index) {
+    switch (index) {
+      case 0: // FM Radio
+        return Icons.radio;
+      case 1: // MP3 Player
+        return Icons.music_note;
+      case 2: // MP3 Download
+        return CupertinoIcons.arrow_down_circle_fill;
+      case 3: // More
+        return Icons.more_horiz;
+      default:
+        return Icons.radio;
+    }
+  }
+
+  // Get label for each navigation item
+  String _getItemLabel(int index) {
+    switch (index) {
+      case 0:
+        return 'Radio';
+      case 1:
+        return 'Player';
+      case 2:
+        return 'Download';
+      case 3:
+        return 'More';
+      default:
+        return 'Radio';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // The floating action button (search) from RadioPlayerScreen will no longer
-      // be visible here. We will move the search functionality if needed.
-      // For now, we only show the body of the selected screen.
       body: Center(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
-          // Use a key tied to the index to force AnimatedSwitcher to animate the switch
           key: ValueKey<int>(_selectedIndex),
           child: _widgetOptions.elementAt(_selectedIndex),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.radio), // FM Radio Icon
-            label: 'FM Radio',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.music_note), // MP3 Player Icon
-            label: 'MP3 Player',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.arrow_down_circle_fill), // Beautiful Cupertino icon
-            label: 'MP3 Download',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: Colors.blueGrey.shade700,
-        unselectedItemColor: _isRecording
-            ? Colors.grey
-            : Theme.of(context).unselectedWidgetColor,
-        onTap: _onItemTapped,
+      bottomNavigationBar: Container(
+        margin: EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 20,
+              offset: Offset(0, 5),
+              spreadRadius: 2,
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade200, width: 1),
+        ),
+        child: Row(
+          children: List.generate(4, (index) {
+            // Now 4 items
+            return _buildCustomNavItem(
+              index: index,
+              icon: _getItemIcon(index),
+              label: _getItemLabel(index),
+              isSelected: _selectedIndex == index,
+            );
+          }),
+        ),
       ),
     );
   }

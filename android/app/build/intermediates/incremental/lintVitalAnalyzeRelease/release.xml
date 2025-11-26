@@ -2,9 +2,9 @@
     name="release"
     package="com.radio.grradio"
     minSdkVersion="24"
-    targetSdkVersion="35"
+    targetSdkVersion="33"
     mergedManifest="build\intermediates\merged_manifest\release\processReleaseMainManifest\AndroidManifest.xml"
-    proguardFiles="build\intermediates\default_proguard_files\global\proguard-android-optimize.txt-8.7.0;D:\Sw\flutter_3.35\flutter\packages\flutter_tools\gradle\flutter_proguard_rules.pro;proguard-rules.pro"
+    proguardFiles="build\intermediates\default_proguard_files\global\proguard-android-optimize.txt-8.7.0;D:\Sw\flutter_3.35\flutter\packages\flutter_tools\gradle\flutter_proguard_rules.pro;proguard-rules.pro;build\intermediates\default_proguard_files\global\proguard-android-optimize.txt-8.7.0;proguard-rules.pro"
     partialResultsDir="build\intermediates\lint_vital_partial_results\release\lintVitalAnalyzeRelease\out"
     desugaredMethodsFiles="D:\.gradle\caches\8.12\transforms\0b0467c41699e163eec23fa4d860068d\transformed\D8BackportedDesugaredMethods.txt">
   <buildFeatures
