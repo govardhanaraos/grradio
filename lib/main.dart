@@ -7,35 +7,39 @@ import 'package:grradio/handler/mp3playerhandler.dart';
 import 'package:grradio/more/more.dart';
 import 'package:grradio/mp3download/mp3downloadscreen.dart'; // Add this import
 import 'package:grradio/mp3playerscreen.dart';
-import 'package:grradio/radio_station_service.dart';
 import 'package:grradio/radioplayerhandler.dart';
 import 'package:grradio/radioplayerscreen.dart';
 import 'package:grradio/radiostation.dart';
+import 'package:grradio/radiostationserviceapi.dart';
 import 'package:just_audio/just_audio.dart';
 
-final RadioStationService _radioService = RadioStationService();
+final RadioStationServiceAPI _radioService = RadioStationServiceAPI();
 List<RadioStation> allRadioStations = [];
 
 Future<void> loadStations() async {
   try {
-    allRadioStations = await _radioService.fetchRadioStations();
+    final stations = await _radioService.fetchRadioStations();
+
     // Now 'allRadioStations' contains the data from MongoDB
     // You can now use this list to initialize your RadioPlayerHandler or UI.
     print('Loaded ${allRadioStations.length} stations from MongoDB.');
+    print('Loaded Stations: ${allRadioStations}');
+
+    allRadioStations = stations;
   } catch (e) {
     print('Failed to load radio stations.');
   }
 }
 
 // Global audio handlers
-late AudioHandler globalAudioHandler;
+late AudioHandler globalRadioAudioHandler;
 late AudioPlayer globalMp3Player;
-late AudioHandler globalMp3QueuePlayer;
+late Mp3PlayerHandler globalMp3QueueService;
 
 // Audio coordination functions
 void pauseRadioIfPlaying() {
-  if (globalAudioHandler.playbackState.value.playing) {
-    globalAudioHandler.pause();
+  if (globalRadioAudioHandler.playbackState.value.playing) {
+    globalRadioAudioHandler.pause();
   }
 }
 
@@ -71,7 +75,7 @@ Future<void> _initAudioHandlers() async {
   // Initialize MP3 player
   globalMp3Player = AudioPlayer();
 
-  globalAudioHandler = await AudioService.init(
+  globalRadioAudioHandler = await AudioService.init(
     builder: () => RadioPlayerHandler(stations: allRadioStations),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.yourapp.radio',
@@ -83,16 +87,8 @@ Future<void> _initAudioHandlers() async {
       preloadArtwork: true,
     ),
   );
-  // 💡 Initialize MP3 Queue Player Handler
-  globalMp3QueuePlayer = await AudioService.init(
-    builder: () => Mp3PlayerHandler(), // Use the new handler class
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.radio.grradio.mp3',
-      androidNotificationChannelName: 'MP3 Playback',
-      androidNotificationIcon: 'drawable/ic_bg_service_small',
-      androidNotificationOngoing: true,
-    ),
-  );
+  globalMp3QueueService = Mp3PlayerHandler();
+  await globalMp3QueueService.init();
 }
 
 void main() async {

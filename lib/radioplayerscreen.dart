@@ -57,7 +57,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showInterstitialAfterDelay();
     });
-    _audioHandler = globalAudioHandler;
+    _audioHandler = globalRadioAudioHandler;
 
     _animationController = AnimationController(
       vsync: this,
@@ -124,14 +124,19 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     if (_searchQuery.isEmpty) {
       return allRadioStations;
     }
+    final query = _searchQuery.toLowerCase();
+
     return allRadioStations
         .where(
           (station) =>
-              station.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              (station.language?.toLowerCase().contains(
-                    _searchQuery.toLowerCase(),
-                  ) ??
-                  false),
+              // Search by Name (e.g., "Akashvani Kanpur")
+              station.name.toLowerCase().contains(query) ||
+              // Search by State (e.g., "UTTAR PRADESH") - Now correctly mapped to station.state
+              (station.state?.toLowerCase().contains(query) ?? false) ||
+              // Search by Language (e.g., "Hindi") - Now correctly mapped to station.language
+              (station.language?.toLowerCase().contains(query) ?? false) ||
+              // Search by Language (e.g., "Hindi") - Now correctly mapped to station.language
+              (station.page?.toLowerCase().contains(query) ?? false),
         )
         .toList();
   }
@@ -465,8 +470,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
   Widget _buildExpandedPlayer(MediaItem mediaItem) {
     return Container(
-      // Use a Container for the full screen/available space background
-      //color: Colors.grey[100], // Choose a background color
       decoration: const BoxDecoration(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
@@ -486,7 +489,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                   style: TextStyle(
                     fontSize: RButton.getMediumFontSize(),
                     fontWeight: FontWeight.bold,
-                    color: Colors.blueGrey[800], // Darker text color
+                    color: Colors.blueGrey[800],
                   ),
                 ),
                 Spacer(),
@@ -495,36 +498,30 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                     Icons.keyboard_arrow_down,
                     color: Colors.blueGrey[600],
                     size: RButton.getMediumFontSize() * 1.5,
-                  ), // Changed icon to a down arrow for minimize/collapse
+                  ),
                   onPressed: _minimizePlayer,
                 ),
               ],
             ),
           ),
-          Divider(height: 1, color: Colors.blueGrey[100]), // Lighter divider
+          Divider(height: 1, color: Colors.blueGrey[100]),
+
           // Station image and info
           Expanded(
             flex: 3,
             child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                10,
-                20,
-                10,
-              ), // Reduced top/bottom padding
+              padding: EdgeInsets.fromLTRB(20, 10, 20, 10),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width:
-                        RButton.getXXLargeImageSize() *
-                        1.1, // Slightly larger image
+                    width: RButton.getXXLargeImageSize() * 1.1,
                     height: RButton.getXXLargeImageSize() * 1.1,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20), // Sharper radius
+                      borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black38, // Slightly stronger shadow
+                          color: Colors.black38,
                           blurRadius: RButton.getXLargeSpacing() * 1.5,
                           offset: Offset(0, 8),
                         ),
@@ -545,7 +542,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                                         valueColor:
                                             AlwaysStoppedAnimation<Color>(
                                               Colors.blueAccent,
-                                            ), // Color for indicator
+                                            ),
                                         value:
                                             loadingProgress
                                                     .expectedTotalBytes !=
@@ -560,8 +557,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                                   },
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(
-                                  color: Colors
-                                      .blueGrey[200], // Slightly darker error background
+                                  color: Colors.blueGrey[200],
                                   child: Center(
                                     child: Icon(
                                       Icons.radio,
@@ -584,18 +580,15 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                             ),
                     ),
                   ),
-                  SizedBox(
-                    height: RButton.getXLargeSpacing(),
-                  ), // Increased spacing
+                  SizedBox(height: RButton.getXLargeSpacing()),
                   Text(
                     mediaItem.title,
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize:
-                          RButton.getLargeFontSize() * 1.2, // Larger title font
-                      fontWeight: FontWeight.w900, // Extra bold
+                      fontSize: RButton.getLargeFontSize() * 1.2,
+                      fontWeight: FontWeight.w900,
                       color: Colors.blueGrey[900],
                     ),
                   ),
@@ -603,8 +596,7 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                   Text(
                     mediaItem.genre ?? 'Radio Stream',
                     style: TextStyle(
-                      fontSize:
-                          RButton.getMediumFontSize(), // Slightly larger genre font
+                      fontSize: RButton.getMediumFontSize(),
                       color: Colors.grey[500],
                       fontWeight: FontWeight.w500,
                     ),
@@ -618,27 +610,23 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           Expanded(
             flex: 2,
             child: Padding(
-              padding: EdgeInsets.all(30), // Increased padding
+              padding: EdgeInsets.all(20), // Reduced padding for better fit
               child: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.start, // Align to top of section
+                mainAxisAlignment: MainAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Control buttons
+                  // Control buttons - FIXED: Stable layout
                   StreamBuilder<PlaybackState>(
                     stream: _audioHandler.playbackState,
                     builder: (context, snapshot) {
                       final playing = snapshot.data?.playing ?? false;
                       final processingState = snapshot.data?.processingState;
                       final isLoading =
-                          processingState ==
-                          AudioProcessingState
-                              .loading; // Consider connecting as loading
+                          processingState == AudioProcessingState.loading;
 
-                      // *** Beautiful Controls Redesign ***
-                      final Color primaryControlColor =
-                          Colors.deepOrangeAccent; // Eye-catching color
-                      final Color secondaryControlColor = Colors
-                          .deepOrange[50]!; // Light background for side buttons
+                      final Color primaryControlColor = Colors.deepOrangeAccent;
+                      final Color secondaryControlColor =
+                          Colors.deepOrange[50]!;
                       final double mainButtonSize =
                           RButton.getMainControlButtonSize();
 
@@ -675,108 +663,113 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                           ),
                         );
                       }
-                      // *** End of Helper Function ***
 
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Previous button
-                          _buildBeautifulControlButton(
-                            icon: Icons.skip_previous_rounded,
-                            onPressed: _isRecording
-                                ? null
-                                : _audioHandler.skipToPrevious,
-                            size: mainButtonSize * 0.6,
-                            iconSize: mainButtonSize * 0.4,
-                            backgroundColor: secondaryControlColor,
-                            iconColor: primaryControlColor,
-                          ),
+                      return Container(
+                        height:
+                            mainButtonSize *
+                            1.2, // Fixed height to prevent shifting
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Previous button
+                            _buildBeautifulControlButton(
+                              icon: Icons.skip_previous_rounded,
+                              onPressed: _isRecording
+                                  ? null
+                                  : _audioHandler.skipToPrevious,
+                              size: mainButtonSize * 0.6,
+                              iconSize: mainButtonSize * 0.4,
+                              backgroundColor: secondaryControlColor,
+                              iconColor: primaryControlColor,
+                            ),
 
-                          SizedBox(
-                            width: RButton.getXXLargeSpacing(),
-                          ), // Increased spacing
-                          // Play/Pause button
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              if (isLoading)
-                                SizedBox(
-                                  width: mainButtonSize,
-                                  height: mainButtonSize,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 4,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      primaryControlColor.withOpacity(0.5),
+                            SizedBox(width: RButton.getXXLargeSpacing()),
+
+                            // Play/Pause button with stable loading indicator
+                            Container(
+                              width: mainButtonSize, // Fixed width
+                              height: mainButtonSize, // Fixed height
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Loading indicator - positioned absolutely
+                                  if (isLoading)
+                                    Positioned.fill(
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 4,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              primaryControlColor.withOpacity(
+                                                0.5,
+                                              ),
+                                            ),
+                                      ),
                                     ),
+                                  // Play/Pause button - always present
+                                  _buildBeautifulControlButton(
+                                    icon: playing
+                                        ? Icons.pause_rounded
+                                        : Icons.play_arrow_rounded,
+                                    size: mainButtonSize * 0.8,
+                                    iconSize: mainButtonSize * 0.5,
+                                    onPressed: _isRecording
+                                        ? null
+                                        : (playing
+                                              ? _audioHandler.pause
+                                              : _audioHandler.play),
+                                    backgroundColor: primaryControlColor,
+                                    iconColor: Colors.white,
                                   ),
-                                ),
-                              _buildBeautifulControlButton(
-                                icon: playing
-                                    ? Icons.pause_rounded
-                                    : Icons.play_arrow_rounded,
-                                size:
-                                    mainButtonSize *
-                                    0.8, // Main button is slightly larger
-                                iconSize: mainButtonSize * 0.5,
-                                onPressed: _isRecording
-                                    ? null
-                                    : (playing
-                                          ? _audioHandler.pause
-                                          : _audioHandler.play),
-                                backgroundColor: primaryControlColor,
-                                iconColor:
-                                    Colors.white, // White icon for contrast
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
 
-                          SizedBox(
-                            width: RButton.getXXLargeSpacing(),
-                          ), // Increased spacing
-                          // Next button
-                          _buildBeautifulControlButton(
-                            icon: Icons.skip_next_rounded,
-                            onPressed: _isRecording
-                                ? null
-                                : _audioHandler.skipToNext,
-                            size: mainButtonSize * 0.6,
-                            iconSize: mainButtonSize * 0.4,
-                            backgroundColor: secondaryControlColor,
-                            iconColor: primaryControlColor,
-                          ),
-                        ],
+                            SizedBox(width: RButton.getXXLargeSpacing()),
+
+                            // Next button
+                            _buildBeautifulControlButton(
+                              icon: Icons.skip_next_rounded,
+                              onPressed: _isRecording
+                                  ? null
+                                  : _audioHandler.skipToNext,
+                              size: mainButtonSize * 0.6,
+                              iconSize: mainButtonSize * 0.4,
+                              backgroundColor: secondaryControlColor,
+                              iconColor: primaryControlColor,
+                            ),
+                          ],
+                        ),
                       );
                     },
                   ),
 
                   SizedBox(
-                    height: RButton.getXXLargeSpacing() * 1.5,
-                  ), // Increased spacing
+                    height: RButton.getLargeSpacing(),
+                  ), // Reduced spacing
                   // Recording and additional buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  Wrap(
+                    spacing: 20,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
                     children: [
-                      // Record button
                       _buildActionButton(
                         icon: _isRecording
-                            ? Icons
-                                  .stop_rounded // Changed icon for a softer look
+                            ? Icons.stop_rounded
                             : Icons.fiber_manual_record_rounded,
                         label: _isRecording ? 'Stop Recording' : 'Record',
                         color: _isRecording
                             ? Colors.redAccent
-                            : Colors.blueGrey, // RedAccent for stop
+                            : Colors.blueGrey,
                         onPressed: _toggleRecording,
                       ),
-
-                      // Open recordings button
+                      SizedBox(width: RButton.getXLargeSpacing()),
                       _buildActionButton(
                         icon: CupertinoIcons.recordingtape,
                         label: 'Recordings',
                         color: _isRecording ? Colors.grey : Colors.blueGrey,
                         onPressed: _isRecording
                             ? () {
-                                // 💡 FIX: If recording is in progress, block the action and show a message
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
@@ -788,8 +781,6 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                               }
                             : () async {
                                 await _audioHandler.pause();
-
-                                // 💡 FIX: Use the dedicated navigation callback for Recordings
                                 widget.onNavigateToRecordings();
                               },
                       ),

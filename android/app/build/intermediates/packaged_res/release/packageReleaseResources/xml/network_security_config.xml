@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">stream.teluguoneradio.com</domain>
+        <domain includeSubdomains="true">radio.garden</domain>
         <domain includeSubdomains="true">prclive1.listenon.in</domain>
         <domain includeSubdomains="true">radioindia.net</domain>
         <domain includeSubdomains="true">air.pc.cdn.bitgravity.com</domain>

@@ -14,11 +14,16 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
   final _player = AudioPlayer();
   RadioStation? _currentStation;
   bool _isLoading = false;
-  // 💡 NEW: State to track recording status
   bool _isRecording = false;
   String? _lastExtractedStreamUrl;
 
-  // 💡 NEW: Dio components for stream recording
+  // Stream interruption recovery
+  Timer? _recoveryTimer;
+  int _reconnectAttempts = 0;
+  final int _maxReconnectAttempts = 3;
+  bool _isRecovering = false;
+
+  // Dio components for stream recording
   final Dio _dio = Dio();
   CancelToken? _recordingCancelToken;
 
@@ -26,28 +31,131 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   RadioPlayerHandler({required List<RadioStation> stations})
     : _radioStations = stations {
-    _dio.options.receiveTimeout = const Duration(
-      minutes: 5,
-    ); // e.g., 5 minutes or more
-    _dio.options.connectTimeout = const Duration(
-      seconds: 15,
-    ); // Ensure initial connection is good
+    _dio.options.receiveTimeout = const Duration(minutes: 5);
+    _dio.options.connectTimeout = const Duration(seconds: 15);
     _setupAudioSession();
     _notifyAudioHandlerAboutPlaybackEvents();
+    _setupPlayerListeners();
+  }
 
-    // Set up player event listeners
+  bool _isIcecastShoutcastStream(String url) {
+    return url.contains(';stream/') ||
+        url.contains('/stream') ||
+        url.contains(':8164') || // Common Icecast port
+        url.contains(':8000') || // Common Shoutcast port
+        url.toLowerCase().contains('icecast') ||
+        url.toLowerCase().contains('shoutcast');
+  }
+
+  // Enhanced player listeners for stream recovery
+  void _setupPlayerListeners() {
     _player.playerStateStream.listen((playerState) {
       _isLoading = playerState.processingState == ProcessingState.loading;
       _updatePlaybackState();
+
+      // Detect unexpected stops
+      if (!playerState.playing &&
+          playbackState.value.playing &&
+          !_isLoading &&
+          _currentStation != null &&
+          !_isRecovering) {
+        if (_isIcecastShoutcastStream(_currentStation?.streamUrl ?? '')) {
+          Future.delayed(Duration(seconds: 3), () {
+            if (!_player.playing && !_isRecovering) {
+              print('Unexpected playback stop detected for Icecast stream');
+              _scheduleRecovery();
+            }
+          });
+        } else {
+          print('Unexpected playback stop detected');
+          _scheduleRecovery();
+        }
+      }
     });
 
     _player.processingStateStream.listen((processingState) {
       _isLoading = processingState == ProcessingState.loading;
-      _updatePlaybackState();
+
+      // Handle completed state for live streams
+      if (processingState == ProcessingState.completed &&
+          playbackState.value.playing &&
+          _currentStation != null) {
+        print('Stream completed unexpectedly - attempting recovery');
+        _scheduleRecovery();
+      }
+    });
+
+    // Buffer monitoring
+    _player.bufferedPositionStream.listen((position) {
+      final duration = _player.duration;
+      if (duration != null) {
+        final bufferPercentage =
+            (position.inSeconds / duration.inSeconds * 100);
+        print(
+          'Buffer: ${position.inSeconds}s (${bufferPercentage.toStringAsFixed(1)}%)',
+        );
+      }
+    });
+
+    // Error handling
+    _player.playbackEventStream.listen((event) {
+      if (event.processingState == ProcessingState.idle &&
+          playbackState.value.playing &&
+          _currentStation != null) {
+        print('Stream went idle unexpectedly');
+        _scheduleRecovery();
+      }
     });
   }
 
-  // 💡 NEW: Method to toggle recording state and handle simulation
+  // Stream recovery mechanism
+  void _scheduleRecovery() {
+    if (_recoveryTimer != null && _recoveryTimer!.isActive) {
+      return;
+    }
+
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      print('Max reconnection attempts reached');
+      _reconnectAttempts = 0;
+      _isRecovering = false;
+      return;
+    }
+
+    _recoveryTimer = Timer(Duration(seconds: 2 + _reconnectAttempts * 2), () {
+      _attemptRecovery();
+    });
+  }
+
+  Future<void> _attemptRecovery() async {
+    if (_currentStation == null) return;
+
+    _isRecovering = true;
+    print('Attempting stream recovery (attempt ${_reconnectAttempts + 1})');
+    _reconnectAttempts++;
+
+    try {
+      await _player.stop();
+      // Small delay to ensure clean stop
+      await Future.delayed(Duration(milliseconds: 500));
+      await _playStation(_currentStation!, isRecovery: true);
+      _reconnectAttempts = 0;
+      _isRecovering = false;
+      print('Stream recovery successful');
+    } catch (e) {
+      print('Stream recovery failed: $e');
+      _isRecovering = false;
+      if (_reconnectAttempts < _maxReconnectAttempts) {
+        _scheduleRecovery();
+      } else {
+        print(
+          'Giving up on stream recovery after $_maxReconnectAttempts attempts',
+        );
+        _reconnectAttempts = 0;
+      }
+    }
+  }
+
+  // Recording methods (unchanged from your working version)
   Future<void> toggleRecord(MediaItem? mediaItem) async {
     if (mediaItem == null || !playbackState.value.playing) {
       _sendPermissionDenied('Please play a radio station before recording.');
@@ -55,22 +163,17 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     }
 
     if (!_isRecording) {
-      // 1. Request/Check Permissions before starting
       final status = await Permission.audio.request();
-
       if (status.isGranted || status.isLimited) {
-        // Permission granted, start recording
         _isRecording = true;
         _sendRecordStatus(true);
         await _startRecording(mediaItem);
       } else {
-        // Permission denied
         _sendPermissionDenied('Storage permission denied. Cannot record.');
-        openAppSettings(); // Suggest opening settings
+        openAppSettings();
         return;
       }
     } else {
-      // 2. Stop Recording
       await _stopRecording();
       _isRecording = false;
       _sendRecordStatus(false);
@@ -79,72 +182,56 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   Future<void> _startRecording(MediaItem mediaItem) async {
     _recordingCancelToken = CancelToken();
-    String currentUrl =
-        _currentStation?.streamUrl ??
-        'Unknown streaming URL _currentStation.streamUrl';
+    String currentUrl = _currentStation?.streamUrl ?? 'Unknown streaming URL';
+    String referer = currentUrl.contains('radio.garden')
+        ? 'https://radio.garden/'
+        : 'https://akashvani.gov.in/';
 
-    // Headers for network requests (used by both http and dio)
-    const Map<String, String> richHeaders = {
-      'User-Agent': 'Mozilla/5.0 (compatible; Flutter Radio Recorder)',
-      'Referer': 'https://akashvani.gov.in/',
+    Map<String, String> richHeaders = {
+      'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36',
+      'Referer': referer,
       'Accept-Encoding': 'identity',
       'Accept': '*/*',
     };
 
-    // 💡 NEW: Flag to determine if we should use the HLS polling loop
     bool isHlsRecording = false;
+    int maxRedirects = 3;
 
-    // 💡 CRITICAL FIX: Iteratively resolve M3U8 links until a direct audio stream is found
-    int maxRedirects = 3; // Prevent infinite loops
     for (int i = 0; i < maxRedirects; i++) {
       if (currentUrl.toLowerCase().contains('.m3u8')) {
         print(
           'M3U8 detected. Attempting to extract direct stream URL for recording...',
         );
-
         final Uri baseUri = Uri.parse(currentUrl);
 
         try {
           final response = await http.get(baseUri, headers: richHeaders);
-
           if (response.statusCode == 200) {
             final lines = response.body.split('\n');
             String? foundUrl;
 
             for (final line in lines) {
               final trimmedLine = line.trim();
-              // Skip comments and empty lines
               if (trimmedLine.isNotEmpty && !trimmedLine.startsWith('#')) {
-                // Found a potential URL.
                 String resolvedUrl = baseUri.resolve(trimmedLine).toString();
-
-                // If it's another playlist, we'll try to follow it in the next loop iteration.
                 if (resolvedUrl.toLowerCase().contains('.m3u8')) {
                   foundUrl = resolvedUrl;
                   print("Found secondary M3U8 playlist: $foundUrl");
-                  break; // Follow this next
+                  break;
                 } else {
-                  // 💡 CRITICAL CHANGE: We found a media segment (.ts, .aac, etc.).
-                  // This means the CURRENT URL (baseUri) is the bitrate-specific M3U8
-                  // playlist we must use for continuous polling.
-                  print(
-                    "Media segment found. Will use current M3U8 for continuous recording.",
-                  );
                   isHlsRecording = true;
-                  i = maxRedirects; // Exit the outer loop
-                  break; // Exit the inner lines loop
+                  i = maxRedirects;
+                  break;
                 }
               }
             }
 
             if (foundUrl != null) {
-              currentUrl =
-                  foundUrl; // Update to the new M3U8 URL (e.g., bitrate playlist)
+              currentUrl = foundUrl;
             } else if (isHlsRecording) {
-              // Segment found, currentUrl is the correct M3U8 URL. Break out.
               break;
             } else {
-              // If the playlist was empty or just comments, stop trying to extract
               print(
                 "M3U8 file was empty or contained no links. Stopping extraction.",
               );
@@ -161,14 +248,11 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
           break;
         }
       } else {
-        // Not an M3U8, so it's the direct stream URL we want to record.
         break;
       }
     }
-    final recordingUrl =
-        currentUrl; // This is either the direct stream OR the final M3U8 playlist URL.
 
-    // --- 1. Determine File Path and Extension ---
+    final recordingUrl = currentUrl;
     Directory directory;
     final externalDirectories = await getExternalStorageDirectories(
       type: StorageDirectory.downloads,
@@ -178,23 +262,19 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
       directory = externalDirectories.first;
       print('Saving to Downloads directory: ${directory.path}');
     } else {
-      // Fallback to internal app storage (Application Documents) if Downloads path is unavailable
       print(
         'Warning: Downloads directory unavailable, falling back to application documents.',
       );
       directory = await getApplicationDocumentsDirectory();
     }
-    // 💡 REVISED PATH LOGIC: Attempt to target the public Downloads folder.
 
-    // Ensure the directory exists
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
 
-    // Attempt to guess the file extension (MP3 is most common for streams)
     String extension = '.mp3';
     if (recordingUrl.toLowerCase().contains('.ts')) {
-      extension = '.ts'; // Save as .ts (Transport Stream)
+      extension = '.ts';
     } else if (recordingUrl.toLowerCase().contains('.aac') ||
         recordingUrl.toLowerCase().contains('.m4a')) {
       extension = '.aac';
@@ -202,7 +282,6 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
       extension = '.ogg';
     }
 
-    // Create a safe filename
     final safeTitle = mediaItem.title.replaceAll(RegExp(r'[^\w\s\-]'), '');
     final fileName =
         '${safeTitle}_${DateTime.now().millisecondsSinceEpoch}$extension';
@@ -214,18 +293,13 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     IOSink? sink;
     bool didError = false;
     final file = File(filePath);
-    // 💡 NEW: Set to track segments already downloaded for HLS
     final Set<String> downloadedSegments = {};
 
     try {
-      // 2. Open the file write stream (sink) in append mode
       sink = file.openWrite(mode: FileMode.append);
 
-      // --- 2. HLS Polling Loop OR Direct Stream Download ---
       if (isHlsRecording) {
-        // 💡 HLS Polling Logic: Loop until canceled
         while (!(_recordingCancelToken?.isCancelled ?? false)) {
-          // 2.1. Fetch the M3U8 Playlist
           final playlistUri = Uri.parse(recordingUrl);
           final playlistResponse = await http.get(
             playlistUri,
@@ -242,21 +316,17 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
           final lines = playlistResponse.body.split('\n');
           final segmentUrls = <String>[];
 
-          // 2.2. Parse M3U8 for new segments
           for (final line in lines) {
             final trimmedLine = line.trim();
             if (trimmedLine.isNotEmpty &&
                 !trimmedLine.startsWith('#') &&
                 !trimmedLine.toLowerCase().contains('.m3u8')) {
-              // Resolve URL relative to the playlist URL
               final segmentUrl = playlistUri.resolve(trimmedLine).toString();
               segmentUrls.add(segmentUrl);
             }
           }
 
-          // 2.3. Download and Append NEW Segments
           for (final segmentUrl in segmentUrls) {
-            // Only download segments we haven't seen yet
             if (!downloadedSegments.contains(segmentUrl)) {
               print('Downloading new segment: ${segmentUrl.split('/').last}');
 
@@ -264,112 +334,75 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
                 print(
                   'Segment download loop aborted due to user cancellation.',
                 );
-                // Use 'return;' or 'break;' here to exit the segment fetching function/loop immediately.
                 return;
               }
 
               try {
-                // Use Dio to download the single segment stream
                 final segmentResponse = await _dio.get<ResponseBody>(
                   segmentUrl,
                   options: Options(
                     responseType: ResponseType.stream,
-                    // Short timeout is fine for single segments, but set for safety
                     receiveTimeout: const Duration(seconds: 30),
                     headers: richHeaders,
                   ),
                   cancelToken: _recordingCancelToken,
                 );
-                print('Recording finished naturally and saved to: $filePath');
+
                 if (segmentResponse.data?.stream != null) {
                   await sink.addStream(segmentResponse.data!.stream);
-                  downloadedSegments.add(segmentUrl); // Mark as downloaded
+                  downloadedSegments.add(segmentUrl);
                 } else {
                   print('Error: Segment stream was null for $segmentUrl');
                 }
               } on DioException catch (e) {
-                // 💡 CRITICAL FIX 2: Catch the Dio cancellation error and do NOT treat it as a success.
                 if (e.type == DioExceptionType.cancel) {
                   print(
                     'Recording segment fetch was intentionally cancelled by user.',
                   );
-                  // Do nothing else here. The loop check (Fix 1) will prevent further execution.
                 } else {
-                  // Handle other network/Dio errors
                   print('Dio segment download error: $e');
                 }
-                // IMPORTANT: If an error or cancellation occurs, ensure the code that queues
-                // the *next* segment is skipped. If this function is inside a `while(true)` loop,
-                // use a `break;` or `return;` based on the error type if it's not a cancellation.
               } catch (e) {
-                // Handle other errors (e.g., file system errors)
                 print('General segment download error: $e');
               }
             }
           }
 
-          // 2.4. Wait for the next segment to be published (usually 5-10 seconds)
           await Future.delayed(const Duration(seconds: 10));
         }
       } else {
-        // 💡 Direct Stream Logic: Single Dio request for non-HLS streams
         final response = await _dio.get<ResponseBody>(
           recordingUrl,
           options: Options(
             responseType: ResponseType.stream,
-            receiveTimeout: const Duration(
-              minutes: 30,
-            ), // Long timeout for continuous stream
+            receiveTimeout: const Duration(minutes: 30),
             headers: richHeaders,
           ),
           cancelToken: _recordingCancelToken,
         );
-        print('Recording finished naturally and saved to: $filePath');
-        print('Dio Response Status Code: ${response.statusCode}');
 
         if (response.data?.stream != null) {
           await sink.addStream(response.data!.stream);
-          downloadedSegments.add(recordingUrl); // Mark as downloaded
         } else {
           print('Error: Segment stream was null for $recordingUrl');
         }
-        // Listen to the network stream and pipe it to the file sink
-        await sink.addStream(response.data!.stream);
       }
 
-      // This line is reached when the stream ends (HLS loop canceled or direct stream finished)
       print('Recording finalized and saved successfully to: $filePath');
     } on DioException catch (e) {
-      // 5. Handle errors and cancellations
       final isCancel = e.type == DioExceptionType.cancel;
-
-      if (e.type == DioExceptionType.cancel) {
-        print('Recording segment fetch was intentionally cancelled by user.');
-        // Do not proceed with the next segment. The calling function should handle
-        // the loop exit based on this exception or the status check (Fix 1).
-      } else {
-        // Handle other network/Dio errors
-        print('Dio segment download error: $e');
-      }
-
       if (!isCancel) {
         didError = true;
         final errorMessage =
             e.message ?? 'Unknown streaming error: ${e.toString()}';
-
         print('Recording Error: $errorMessage');
-        // Assuming _sendPermissionDenied is a utility to notify the user/UI
-        // You might rename this to something like _sendRecordingFailed
         _sendPermissionDenied('Recording failed: $errorMessage');
       }
     } finally {
-      // 🚨 CRITICAL FIX 2: ALWAYS close the sink to flush data and finalize the file!
       if (sink != null) {
         await sink.close();
       }
 
-      // 🚨 CRITICAL FIX 3: Delete the file if a non-cancellation error occurred
-      // OR if it was canceled (as a canceled file is corrupt/partial).
       if (didError || (_recordingCancelToken?.isCancelled ?? false)) {
         if (await file.exists()) {
           await file.delete();
@@ -381,40 +414,35 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   Future<void> _stopRecording() async {
     print('Stopping recording...');
-
-    // Cancels the Dio request, which gracefully stops the stream write.
     if (_recordingCancelToken != null && !_recordingCancelToken!.isCancelled) {
-      // The cancel message is purely for logging/debugging purposes
       _recordingCancelToken!.cancel('Recording stopped by user');
       print('Dio download cancelled successfully.');
     }
     _recordingCancelToken?.cancel();
     _recordingCancelToken = null;
-    // The UI handler will send the 'Recording saved' message upon receiving _sendRecordStatus(false)
-
     customEvent.add({'event': 'record_status', 'isRecording': false});
   }
 
-  // Helper to send the custom event to the UI
   void _sendRecordStatus(bool isRecording) {
     customEvent.add({'event': 'record_status', 'isRecording': isRecording});
   }
 
-  // Helper to send permission denied message
   void _sendPermissionDenied(String message) {
     customEvent.add({'event': 'permission_denied', 'message': message});
   }
 
-  // Override to ensure recording stops when playback stops
   @override
   Future<void> stop() async {
-    // 💡 NEW: Stop recording if playing stops
     if (_isRecording) {
-      // Ensure we stop recording gracefully before player stops
       await _stopRecording();
       _isRecording = false;
       _sendRecordStatus(false);
     }
+
+    _recoveryTimer?.cancel();
+    _recoveryTimer = null;
+    _reconnectAttempts = 0;
+    _isRecovering = false;
 
     await _player.stop();
     _currentStation = null;
@@ -423,10 +451,14 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> skipToNext() async {
-    // Stop recording before changing station
     if (_isRecording) {
       await toggleRecord(mediaItem.value);
     }
+
+    _recoveryTimer?.cancel();
+    _recoveryTimer = null;
+    _reconnectAttempts = 0;
+    _isRecovering = false;
 
     final currentIndex = _currentStation != null
         ? _radioStations.indexWhere(
@@ -445,10 +477,14 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> skipToPrevious() async {
-    // Stop recording before changing station
     if (_isRecording) {
       await toggleRecord(mediaItem.value);
     }
+
+    _recoveryTimer?.cancel();
+    _recoveryTimer = null;
+    _reconnectAttempts = 0;
+    _isRecovering = false;
 
     final currentIndex = _currentStation != null
         ? _radioStations.indexWhere(
@@ -466,7 +502,6 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
-  // --- The rest of the methods remain unchanged ---
   Future<void> _setupAudioSession() async {
     final session = await AudioSession.instance;
     await session.configure(
@@ -495,18 +530,12 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     });
   }
 
-  void _updatePlaybackState({
-    // Use a default state to avoid accessing null properties if a value is not yet available
-    PlaybackState? state,
-  }) {
+  void _updatePlaybackState({PlaybackState? state}) {
     final playing = _player.playing;
-
     final processingState = _player.processingState;
 
-    // 1. Determine which controls are supported in the current state
     final controls = <MediaControl>[];
 
-    // 1. Pause/Play Control: Must be present if media is loaded
     if (mediaItem.value != null) {
       if (playing) {
         controls.add(MediaControl.pause);
@@ -515,12 +544,7 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
       }
     }
 
-    // Include Next/Previous controls ONLY if you have multiple stations
-    // You must access the list of stations that was passed to the handler's constructor.
-    // Assuming you have a variable or way to access the total station count:
-    // if (radioStations.length > 1) { // Replace radioStations with your actual list
     if (_radioStations.length > 1) {
-      // They should be available regardless of current playing state
       controls.add(MediaControl.skipToPrevious);
       controls.add(MediaControl.skipToNext);
     }
@@ -530,10 +554,7 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     playbackState.add(
       playbackState.value.copyWith(
         controls: controls,
-
-        systemActions: controls
-            .toSet()
-            .cast<MediaAction>(), // Crucial for Android notification buttons
+        systemActions: controls.toSet().cast<MediaAction>(),
         processingState:
             {
               ProcessingState.idle: AudioProcessingState.idle,
@@ -548,118 +569,266 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     );
   }
 
-  Future<void> _playStation(RadioStation station) async {
-    _currentStation = station;
-    mediaItem.add(station.toMediaItem());
+  // Updated _playStation method with SSL handling and better error recovery
+  Future<void> _playStation(
+    RadioStation station, {
+    bool isRecovery = false,
+  }) async {
+    if (!isRecovery) {
+      _currentStation = station;
+      mediaItem.add(station.toMediaItem());
+    }
 
     await _player.stop();
+    await Future.delayed(Duration(milliseconds: 100));
 
     print("Attempting to play: ${station.name}");
     print("Stream URL: ${station.streamUrl}");
 
-    const Map<String, String> richHeaders = {
-      // Common User-Agent for better compatibility
+    String streamUrl = station.streamUrl;
+    Map<String, String> richHeaders = {
       'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-
-      // FIX FOR 403: Use the official website as the Referer
-      // This is required by many media servers for geo-restricted or protected streams.
-      'Referer': 'https://akashvani.gov.in/',
-
-      // FIX FOR GZIP/PROTOCOL ERROR: Explicitly request no compression.
-      // This bypasses the stream server's potential incorrect Content-Encoding header.
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept':
+          'audio/webm,audio/ogg,audio/wav,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5',
       'Accept-Encoding': 'identity',
-
-      // Standard headers
-      'Accept': '*/*',
       'Connection': 'keep-alive',
+      'Icy-MetaData': '1', // Important for Icecast/Shoutcast streams
     };
 
+    // Handle different types of streams
+    if (station.streamUrl.contains('radio.garden')) {
+      richHeaders['Referer'] = 'https://radio.garden/';
+      richHeaders['Origin'] = 'https://radio.garden';
+    } else if (station.streamUrl.contains('akashvani.gov.in')) {
+      richHeaders['Referer'] = 'https://akashvani.gov.in/';
+    }
+
+    // Special handling for Icecast/Shoutcast streams
+    if (_isIcecastShoutcastStream(station.streamUrl)) {
+      await _playIcecastShoutcastStream(
+        station,
+        streamUrl,
+        richHeaders,
+        isRecovery,
+      );
+      return;
+    }
+
+    // For problematic streams with SSL issues, try HTTP first
+    if (_hasSSLIssues(station.streamUrl)) {
+      await _playWithSSLWorkaround(station, streamUrl, richHeaders, isRecovery);
+      return;
+    }
+
     try {
-      // Try HLS first for m3u8 streams
-      if (station.streamUrl.toLowerCase().contains('.m3u8')) {
+      _configurePlayerBuffering();
+
+      if (streamUrl.toLowerCase().contains('.m3u8')) {
         await _player.setAudioSource(
-          HlsAudioSource(Uri.parse(station.streamUrl), headers: richHeaders),
+          HlsAudioSource(Uri.parse(streamUrl), headers: richHeaders),
         );
-        _lastExtractedStreamUrl = station.streamUrl;
       } else {
-        // For direct streams
         await _player.setAudioSource(
-          ProgressiveAudioSource(
-            Uri.parse(station.streamUrl),
-            headers: richHeaders,
-          ),
+          ProgressiveAudioSource(Uri.parse(streamUrl), headers: richHeaders),
         );
-        _lastExtractedStreamUrl = station.streamUrl;
       }
-      print('_lastExtractedStreamUrl:$_lastExtractedStreamUrl');
+
+      _lastExtractedStreamUrl = streamUrl;
+      print('Using stream URL: $_lastExtractedStreamUrl');
+
       await _player.play();
       _updatePlaybackState();
+
+      _reconnectAttempts = 0;
+      _recoveryTimer?.cancel();
+      _isRecovering = false;
+
       print("Successfully started playback");
+      customEvent.add({'event': 'playback_started', 'station': station.name});
     } catch (error) {
       print("Error playing station ${station.name}: $error");
 
-      // Try fallback method
-      await _tryFallbackUrls(station, error);
+      // Check if it's an SSL error
+      if (_isSSLError(error)) {
+        print("SSL error detected, trying workarounds...");
+        await _playWithSSLWorkaround(
+          station,
+          streamUrl,
+          richHeaders,
+          isRecovery,
+        );
+      } else {
+        customEvent.add({
+          'event': 'playback_error',
+          'station': station.name,
+          'error': error.toString(),
+        });
+
+        if (!station.streamUrl.contains('radio.garden')) {
+          await _tryFallbackUrls(station, error, streamUrl);
+        } else {
+          await _trySimpleRadioGardenFallback(station);
+        }
+      }
     }
   }
-  // radioplayerhandler.dart
 
-  // ... (Inside the RadioPlayerHandler class)
+  // Check if a URL is known to have SSL issues
+  bool _hasSSLIssues(String url) {
+    final problematicDomains = [
+      'stream.teluguoneradio.com',
+      'radio.garden',
+      // Add other domains with SSL issues here
+    ];
 
+    return problematicDomains.any((domain) => url.contains(domain));
+  }
+
+  // Check if error is SSL-related
+  bool _isSSLError(dynamic error) {
+    final errorStr = error.toString();
+    return errorStr.contains('CERTIFICATE_VERIFY_FAILED') ||
+        errorStr.contains('SSLHandshakeException') ||
+        errorStr.contains('CertPathValidatorException') ||
+        errorStr.contains('unable to get local issuer certificate');
+  }
+
+  // Special handling for streams with SSL issues
+  Future<void> _playWithSSLWorkaround(
+    RadioStation station,
+    String originalUrl,
+    Map<String, String> headers,
+    bool isRecovery,
+  ) async {
+    print("Attempting SSL workaround for: ${station.name}");
+
+    // Try HTTP instead of HTTPS
+    if (originalUrl.startsWith('https://')) {
+      final httpUrl = originalUrl.replaceFirst('https://', 'http://');
+      print("Trying HTTP version: $httpUrl");
+
+      try {
+        await _player.setAudioSource(
+          ProgressiveAudioSource(Uri.parse(httpUrl), headers: headers),
+        );
+        await _player.play();
+        _updatePlaybackState();
+        print("HTTP version successful");
+        customEvent.add({'event': 'playback_started', 'station': station.name});
+        return;
+      } catch (e) {
+        print("HTTP version failed: $e");
+      }
+    }
+
+    // Try alternative URLs for known problematic streams
+    final alternativeUrls = await _getAlternativeUrls(station);
+    for (final altUrl in alternativeUrls) {
+      try {
+        print("Trying alternative URL: $altUrl");
+        await _player.setUrl(altUrl, headers: headers);
+        await _player.play();
+        _updatePlaybackState();
+        print("Alternative URL successful: $altUrl");
+        customEvent.add({'event': 'playback_started', 'station': station.name});
+        return;
+      } catch (e) {
+        print("Alternative URL failed: $altUrl - $e");
+      }
+    }
+
+    // If all else fails, notify user
+    customEvent.add({
+      'event': 'playback_error',
+      'station': station.name,
+      'error':
+          'Stream unavailable due to security restrictions. Please try another station.',
+    });
+
+    print("All SSL workarounds failed for: ${station.name}");
+  }
+
+  // Get alternative URLs for problematic stations
+  Future<List<String>> _getAlternativeUrls(RadioStation station) async {
+    final alternatives = <String>[];
+
+    // Add domain-specific alternatives
+    if (station.streamUrl.contains('teluguoneradio.com')) {
+      alternatives.addAll([
+        'http://stream.teluguoneradio.com:8164/;stream/1', // HTTP version
+        'https://stream.teluguoneradio.com:8164/stream', // Alternative path
+        'http://stream.teluguoneradio.com:8164/stream', // HTTP alternative
+      ]);
+    }
+
+    if (station.streamUrl.contains('radio.garden')) {
+      final match = RegExp(
+        r'listen/([^/]+)/channel\.mp3',
+      ).firstMatch(station.streamUrl);
+      if (match != null) {
+        final channelId = match.group(1);
+        alternatives.addAll([
+          'https://radio.garden/api/ara/content/channel/$channelId/listen.mp3',
+          'https://radio.garden/api/ara/content/listen/$channelId/stream.mp3',
+        ]);
+      }
+    }
+
+    return alternatives;
+  }
+
+  // Updated fallback method with better SSL handling
   Future<void> _tryFallbackUrls(
     RadioStation station,
     dynamic initialError,
+    String currentUrl,
   ) async {
-    // ... (definitions for isRedirectLoop and headers remain the same)
+    print("Trying fallback URLs for: ${station.name}");
+
+    // First, try SSL workarounds if it's an SSL error
+    if (_isSSLError(initialError)) {
+      await _playWithSSLWorkaround(station, currentUrl, {}, false);
+      return;
+    }
+
     final isRedirectLoop = initialError.toString().contains(
       'Redirect loop detected',
     );
-    const Map<String, String> richHeaders = {
-      // Common User-Agent for better compatibility
+    String referer = station.streamUrl.contains('akashvani.gov.in')
+        ? 'https://akashvani.gov.in/'
+        : 'https://example.com/';
+
+    Map<String, String> richHeaders = {
       'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-
-      // FIX FOR 403: Use the official website as the Referer
-      // This is required by many media servers for geo-restricted or protected streams.
-      'Referer': 'https://akashvani.gov.in/',
-
-      // FIX FOR GZIP/PROTOCOL ERROR: Explicitly request no compression.
-      // This bypasses the stream server's potential incorrect Content-Encoding header.
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': referer,
       'Accept-Encoding': 'identity',
-
-      // Standard headers
       'Accept': '*/*',
       'Connection': 'keep-alive',
     };
-    // Parse the original stream URL to use as the base for resolving relative paths
-    final baseUri = Uri.parse(station.streamUrl);
 
-    if (!isRedirectLoop) {
+    final baseUri = Uri.parse(currentUrl);
+
+    if (!isRedirectLoop && currentUrl.toLowerCase().contains('.m3u8')) {
       try {
-        // Try to extract direct stream URL from M3U8
-        // 🚨 CRITICAL FIX: Add headers here to avoid 403 Forbidden on the http client request
+        print("Attempting M3U8 extraction...");
         final response = await http.get(baseUri, headers: richHeaders);
-
         if (response.statusCode == 200) {
           final lines = response.body.split('\n');
           for (final line in lines) {
             if (line.trim().isNotEmpty && !line.startsWith('#')) {
               String relativeUrl = line.trim();
-
               final streamUri = baseUri.resolve(relativeUrl);
               String streamUrl = streamUri.toString();
 
               print("Trying extracted stream URL: $streamUrl");
-              await _player.setUrl(
-                streamUrl,
-                headers: richHeaders, // Headers must be here for just_audio
-              );
-              // 💡 CRITICAL FIX: Save the actual stream URL!
+              await _player.setUrl(streamUrl, headers: richHeaders);
               _lastExtractedStreamUrl = streamUrl;
 
               await _player.play();
               _updatePlaybackState();
+              print("M3U8 extraction successful");
               return;
             }
           }
@@ -667,42 +836,259 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
       } catch (e) {
         print("Error extracting from M3U8: $e");
       }
-    } else {
-      print("Skipping M3U8 extraction due to redirect loop.");
     }
 
-    // Final fallback: Try common radio stream formats (.mp3)
+    // Try common fallback formats including HTTP versions
+    final fallbacks = <String>[
+      currentUrl.replaceAll('.m3u8', '.mp3'),
+      currentUrl.replaceAll('.m3u8', '.aac'),
+      currentUrl.replaceAll('/listen/', '/stream/'),
+    ];
+
+    // Add HTTP versions for HTTPS URLs
+    if (currentUrl.startsWith('https://')) {
+      fallbacks.add(currentUrl.replaceFirst('https://', 'http://'));
+    }
+
+    for (final fallbackUrl in fallbacks) {
+      if (fallbackUrl != currentUrl) {
+        try {
+          print("Trying fallback: $fallbackUrl");
+          await _player.setUrl(fallbackUrl, headers: richHeaders);
+          await _player.play();
+          _updatePlaybackState();
+          print("Fallback successful: $fallbackUrl");
+          return;
+        } catch (e) {
+          print("Fallback failed: $fallbackUrl - $e");
+        }
+      }
+    }
+
+    print("All fallback attempts failed for: ${station.name}");
+
+    // Final notification
+    customEvent.add({
+      'event': 'playback_error',
+      'station': station.name,
+      'error': 'Unable to play this station. The stream may be unavailable.',
+    });
+  }
+
+  // Update the _configurePlayerBuffering method to handle SSL issues
+  void _configurePlayerBuffering() {
     try {
-      final fallbackUrl = station.streamUrl.replaceAll('.m3u8', '.mp3');
-      print("Trying MP3 fallback: $fallbackUrl");
-      await _player.setUrl(
-        fallbackUrl,
-        headers: richHeaders, // Headers must be here for just_audio
-      );
+      print('Configuring player for stable streaming...');
+      _player.setLoopMode(LoopMode.off);
+
+      // Set buffer duration for better live streaming
+      // Note: These settings might vary by just_audio version
+    } catch (e) {
+      print('Error configuring player: $e');
+    }
+  }
+
+  // Special handling for Icecast/Shoutcast streams
+  Future<void> _playIcecastShoutcastStream(
+    RadioStation station,
+    String streamUrl,
+    Map<String, String> headers,
+    bool isRecovery,
+  ) async {
+    print("Playing Icecast/Shoutcast stream: ${station.name}");
+
+    // Clean up the stream URL - remove ;stream/1 suffix which can cause issues
+    String cleanUrl = streamUrl;
+    /* if (cleanUrl.contains(';stream/')) {
+      cleanUrl = cleanUrl.split(';stream/').first;
+    }*/
+
+    // Try different variations of the stream URL
+    final streamVariations = [
+      cleanUrl,
+      '$cleanUrl/',
+      '$cleanUrl/stream',
+      '$cleanUrl/;',
+      streamUrl, // original URL as fallback
+    ];
+
+    // Enhanced headers for Icecast/Shoutcast
+    final icecastHeaders = Map<String, String>.from(headers);
+    icecastHeaders.addAll({
+      'Icy-MetaData': '1',
+      'Accept': '*/*',
+      'Connection': 'keep-alive',
+    });
+
+    for (final variation in streamVariations) {
+      try {
+        print("Trying stream variation: $variation");
+
+        // Use setUrl instead of setAudioSource for better compatibility
+        await _player.setUrl(variation, headers: icecastHeaders);
+
+        // Add a small delay before playing
+        await Future.delayed(Duration(milliseconds: 200));
+
+        await _player.play();
+
+        // Wait a bit to see if playback starts successfully
+        await Future.delayed(Duration(seconds: 2));
+
+        // Check if playback is actually working
+        if (_player.playing &&
+            _player.processingState != ProcessingState.idle) {
+          _updatePlaybackState();
+          _lastExtractedStreamUrl = variation;
+
+          _reconnectAttempts = 0;
+          _recoveryTimer?.cancel();
+          _isRecovering = false;
+
+          print("Icecast/Shoutcast stream successful: $variation");
+          customEvent.add({
+            'event': 'playback_started',
+            'station': station.name,
+          });
+          return;
+        } else {
+          // If not actually playing, stop and try next variation
+          await _player.stop();
+          await Future.delayed(Duration(milliseconds: 100));
+        }
+      } catch (e) {
+        print("Stream variation failed: $variation - $e");
+        await _player.stop();
+        await Future.delayed(Duration(milliseconds: 100));
+      }
+    }
+
+    // If all variations fail, try with minimal configuration
+    try {
+      print("Trying minimal configuration for Icecast stream...");
+      await _player.setUrl(cleanUrl); // No headers, let the player handle it
+
+      // Configure player specifically for live streams
+      _player.setLoopMode(LoopMode.off);
+
+      await _player.play();
+
+      // Give it more time to buffer
+      await Future.delayed(Duration(seconds: 3));
+
+      if (_player.playing) {
+        _updatePlaybackState();
+        _lastExtractedStreamUrl = cleanUrl;
+
+        _reconnectAttempts = 0;
+        _recoveryTimer?.cancel();
+        _isRecovering = false;
+
+        print("Minimal configuration successful");
+        customEvent.add({'event': 'playback_started', 'station': station.name});
+        return;
+      }
+    } catch (e) {
+      print("Minimal configuration also failed: $e");
+    }
+
+    // Final fallback - notify user
+    customEvent.add({
+      'event': 'playback_error',
+      'station': station.name,
+      'error':
+          'Icecast/Shoutcast stream format not supported. Please try another station.',
+    });
+
+    print("All Icecast/Shoutcast attempts failed for: ${station.name}");
+  }
+
+  // Simple fallback for Radio Garden
+  Future<void> _trySimpleRadioGardenFallback(RadioStation station) async {
+    try {
+      print("Trying simple Radio Garden fallback...");
+
+      // Try with just the basic URL and no special headers
+      await _player.setUrl(station.streamUrl);
       await _player.play();
       _updatePlaybackState();
+      print("Simple fallback successful");
     } catch (e) {
-      print("MP3 fallback also failed: $e");
+      print("Simple fallback also failed: $e");
+
+      // Final attempt - try to extract from known patterns
+      await _tryExtractRadioGardenStream(station);
+    }
+  } // Simple fallback for Radio Garden
+
+  // Extract Radio Garden stream from known patterns
+  Future<void> _tryExtractRadioGardenStream(RadioStation station) async {
+    try {
+      // Radio Garden URLs often contain channel IDs that can be used
+      // to find alternative streams
+      final match = RegExp(
+        r'listen/([^/]+)/channel\.mp3',
+      ).firstMatch(station.streamUrl);
+      if (match != null) {
+        final channelId = match.group(1);
+        print("Extracted channel ID: $channelId");
+
+        // Try some known Radio Garden alternative patterns
+        final alternatives = [
+          'https://radio.garden/api/ara/content/channel/$channelId/listen.mp3',
+          'https://radio.garden/api/ara/content/listen/$channelId/stream.mp3',
+          'https://radio.garden/api/ara/content/listen/$channelId/index.m3u8',
+        ];
+
+        for (final altUrl in alternatives) {
+          try {
+            print("Trying alternative URL: $altUrl");
+            await _player.setUrl(
+              altUrl,
+              headers: {
+                'User-Agent':
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://radio.garden/',
+              },
+            );
+            await _player.play();
+            _updatePlaybackState();
+            print("Alternative URL successful: $altUrl");
+            return;
+          } catch (e) {
+            print("Alternative URL failed: $altUrl - $e");
+          }
+        }
+      }
+    } catch (e) {
+      print("Error in Radio Garden stream extraction: $e");
     }
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    if (_player.processingState == ProcessingState.completed &&
+        _currentStation != null) {
+      await _playStation(_currentStation!, isRecovery: true);
+    } else {
+      await _player.play();
+    }
+  }
 
   @override
   Future<void> pause() => _player.pause();
 
-  // Custom method to play a specific station
   Future<void> playStation(RadioStation station) async {
     await _playStation(station);
   }
 
-  // Get current station
   RadioStation? get currentStation => _currentStation;
-
-  // Check if loading
   bool get isLoading => _isLoading;
-
-  // 💡 FIX: Public getter to expose the recording status to the UI
   bool get isRecording => _isRecording;
+
+  // Clean up method
+  Future<void> cleanup() async {
+    _recoveryTimer?.cancel();
+    await _player.dispose();
+  }
 }

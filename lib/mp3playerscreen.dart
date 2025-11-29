@@ -836,7 +836,7 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
     }
 
     final listItemHeight = screenHeight * 0.1;
-    final albumArtSize = screenWidth * 0.15;
+    final albumArtSize = screenWidth * 0.30;
     final cardPadding = screenWidth * 0.03;
     final titleFontSize = screenWidth * 0.04;
     final subtitleFontSize = screenWidth * 0.028;
@@ -902,7 +902,7 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
               child: Container(
                 margin: EdgeInsets.symmetric(
                   horizontal: cardMargin,
-                  vertical: cardMargin * 0.5,
+                  vertical: cardMargin * 0.2,
                 ),
                 height: listItemHeight * 1.5,
                 decoration: BoxDecoration(
@@ -929,18 +929,15 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                       : [],
                 ),
                 child: ListTile(
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: cardPadding,
-                    vertical: cardPadding * 0.1,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 6.0,
                   ),
-                  leading: Hero(
-                    tag: 'album_art_$id',
-                    child: Container(
-                      width: albumArtSize,
-                      height: albumArtSize,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(screenWidth * 0.03),
-                      ),
+                  leading: SizedBox(
+                    width: albumArtSize * 0.9,
+                    height: albumArtSize * 5.9,
+                    child: Hero(
+                      tag: 'album_art_$id',
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(screenWidth * 0.03),
                         child: isMediaStore
@@ -950,40 +947,36 @@ class _Mp3PlayerScreenState extends State<Mp3PlayerScreen>
                                 artworkFit: BoxFit.cover,
                                 nullArtworkWidget: _buildPlaceholderArt(
                                   screenWidth,
-                                  albumArtSize,
+                                  albumArtSize * 0.9,
                                   isRecordingList || isDownloadedMp3List,
                                 ),
                               )
                             : _buildPlaceholderArt(
                                 screenWidth,
-                                albumArtSize,
+                                albumArtSize * 0.9,
                                 isRecordingList || isDownloadedMp3List,
                               ),
                       ),
                     ),
                   ),
-                  title: Padding(
-                    padding: const EdgeInsets.all(2.0),
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: isCurrentlyPlaying
-                            ? FontWeight.bold
-                            : FontWeight.w500,
-                        color: isCurrentlyPlaying
-                            ? Colors.blueGrey[900]
-                            : Colors.black87,
-                        fontSize: titleFontSize,
-                      ),
+                  title: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: isCurrentlyPlaying
+                          ? FontWeight.bold
+                          : FontWeight.w500,
+                      color: isCurrentlyPlaying
+                          ? Colors.blueGrey[900]
+                          : Colors.black87,
+                      fontSize: titleFontSize,
                     ),
                   ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      const SizedBox(height: -2),
                       Text(
                         artistOrFileType,
                         maxLines: 1,

@@ -80,8 +80,20 @@ class _Mp3DownloadResultsScreenState extends State<Mp3DownloadResultsScreen> {
         print('API Response: $jsonResponse');
 
         setState(() {
-          _directories = jsonResponse['directories'] ?? [];
-          _files = jsonResponse['files'] ?? [];
+          //_directories = jsonResponse['directories'] ?? [];
+          //_files = jsonResponse['files'] ?? [];
+          var filesFromApi = jsonResponse['files'] as List<dynamic>;
+
+          // Convert the List<dynamic> to List<Map<String, dynamic>>
+          _files = filesFromApi
+              .map((item) => item as Map<String, dynamic>)
+              .toList();
+
+          // Do the same for directories if necessary
+          var directoriesFromApi = jsonResponse['directories'] as List<dynamic>;
+          _directories = directoriesFromApi
+              .map((item) => item as Map<String, dynamic>)
+              .toList();
           _isLoading = false;
         });
       } else {
@@ -882,12 +894,13 @@ class _Mp3DownloadResultsScreenState extends State<Mp3DownloadResultsScreen> {
                   onPressed: () {
                     // 🛑 You must ensure the radio stops when MP3 starts
                     // globalRadioAudioHandler.stop();
-
+                    final List<SongData> validSongs = _files
+                        .where(
+                          (song) => song['url'] != null,
+                        ) // Filter out null URLs
+                        .toList();
                     // Pass the entire file list and the index
-                    (globalMp3QueuePlayer as Mp3PlayerHandler).startQueue(
-                      _files,
-                      index,
-                    );
+                    globalMp3QueueService.startQueue(_files, index);
                   },
                 ),
                 Icon(

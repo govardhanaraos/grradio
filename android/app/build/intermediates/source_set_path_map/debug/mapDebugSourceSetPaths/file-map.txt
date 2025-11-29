@@ -2,7 +2,7 @@ com.radio.grradio.app-debug-0 C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.
 com.radio.grradio.app-debug-1 C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\audio_session-0.1.25\android\build\intermediates\packaged_res\debug\packageDebugResources
 com.radio.grradio.app-debug-2 C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\flutter_native_splash-2.4.7\android\build\intermediates\packaged_res\debug\packageDebugResources
 com.radio.grradio.app-debug-3 C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\google_mobile_ads-6.0.0\android\build\intermediates\packaged_res\debug\packageDebugResources
-com.radio.grradio.app-debug-4 C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\just_audio-0.9.46\android\build\intermediates\packaged_res\debug\packageDebugResources
+com.radio.grradio.app-debug-4 C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\just_audio-0.10.5\android\build\intermediates\packaged_res\debug\packageDebugResources
 com.radio.grradio.app-debug-5 C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\on_audio_query_android-1.1.0\android\build\intermediates\packaged_res\debug\packageDebugResources
 com.radio.grradio.app-debug-6 C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\path_provider_android-2.2.20\android\build\intermediates\packaged_res\debug\packageDebugResources
 com.radio.grradio.app-debug-7 C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\permission_handler_android-12.1.0\android\build\intermediates\packaged_res\debug\packageDebugResources

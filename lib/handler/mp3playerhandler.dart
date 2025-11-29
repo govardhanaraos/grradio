@@ -2,14 +2,14 @@
 
 import 'dart:async';
 
-import 'package:audio_service/audio_service.dart';
+// Note: Removed 'package:audio_service/audio_service.dart' as this is now a regular service
 import 'package:grradio/ads/ad_helper.dart'; // Assuming AdHelper is here
 import 'package:just_audio/just_audio.dart';
 
 // Define the type for the songs coming from your search results
 typedef SongData = Map<String, dynamic>;
 
-class Mp3PlayerHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
+class Mp3PlayerHandler {
   final AudioPlayer _player = AudioPlayer();
   final _playlist = ConcatenatingAudioSource(children: []);
   StreamSubscription? _playerStateSubscription;
@@ -18,10 +18,11 @@ class Mp3PlayerHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   bool _adSequenceActive = false;
 
   Mp3PlayerHandler() {
-    _init();
+    // 💡 Constructor is now empty. Public init() will be called from main.dart.
   }
 
-  void _init() async {
+  // 💡 FIX: Public init() method as required by main.dart
+  Future<void> init() async {
     // 1. Set the playlist and player states
     await _player.setAudioSource(_playlist);
 
@@ -31,7 +32,7 @@ class Mp3PlayerHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
           _player.currentIndex != null) {
         // A song has finished, trigger the ad sequence.
         _adSequenceActive = true;
-        _player.stop(); // 🛑 Stop playback immediately after completion
+        this.stop(); // 🛑 Stop playback immediately after completion
 
         // Show Interstitial Ad
         AdHelper.showInterstitialAd(
@@ -42,40 +43,36 @@ class Mp3PlayerHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
           },
         );
       }
-      _updatePlaybackState();
-    });
-
-    // 3. Notify the system about changes in the queue
-    _player.sequenceStateStream.listen((sequenceState) {
-      final sequence = sequenceState?.effectiveSequence;
-      if (sequence == null) return;
-
-      // Update the queue list for the system media controls
-      queue.add(sequence.map((source) => source.tag as MediaItem).toList());
-
-      // Update the current media item
-      mediaItem.add(sequenceState!.currentSource?.tag as MediaItem?);
+      // Note: System notification logic (like _updatePlaybackState) is removed
+      // as this class no longer extends BaseAudioHandler.
     });
   }
 
   // Converts your search results map to an AudioSource
   AudioSource _createAudioSource(SongData song) {
+    final String songUrl =
+        song['url'] as String; // This assumes 'url' is never null.
+    // If 'url' CAN be null, you must check it
+    // BEFORE this function is called, as a player
+    // cannot play a null URL.
+
+    // It is highly likely the crash is happening on the 'url' field.
+    // If the API allows a null 'url', you must filter those songs out
+    // in mp3downloadresults.dart *before* calling startQueue.
+
+    // However, let's fix the other two tags, which are common sources of this error:
+    final String songTitle = song['name'] as String? ?? 'Unknown Song';
+    final String songArtist = song['artist'] as String? ?? 'Unknown Artist';
     return AudioSource.uri(
-      Uri.parse(song['url'] as String),
-      tag: MediaItem(
-        id: song['url'] as String,
-        album: song['album'] as String? ?? 'MP3 Downloads',
-        title: song['name'] as String? ?? 'Unknown Song',
-        artist: song['artist'] as String? ?? 'Unknown Artist',
-        duration: Duration.zero, // You might need to estimate/fetch this
-      ),
+      Uri.parse(songUrl),
+      tag: {'id': songUrl, 'title': songTitle, 'artist': songArtist},
     );
   }
 
   // Public method to start the entire queue
   Future<void> startQueue(List<SongData> songs, int startIndex) async {
     // 1. Stop any current playback
-    await _player.stop();
+    await this.stop();
 
     // 2. Prepare the new playlist
     final sources = songs.map(_createAudioSource).toList();
@@ -84,37 +81,29 @@ class Mp3PlayerHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
     // 3. Jump to the starting song and play
     await _player.seek(Duration.zero, index: startIndex);
-    play();
+    this.play();
   }
 
   // Internal method to handle playing the next song
   void _playNextTrack() {
     if (_player.hasNext) {
-      skipToNext();
-      play();
+      this.skipToNext();
+      this.play();
     }
   }
 
-  // --- AudioHandler Overrides ---
-  @override
+  // --- Public Player Control Methods (Former AudioHandler Overrides) ---
+
   Future<void> play() => _player.play();
 
-  @override
   Future<void> pause() => _player.pause();
 
-  @override
+  // 💡 FIX: Updated stop method (Cleaned up BaseAudioHandler dependency)
   Future<void> stop() async {
-    // Cancel the listener subscription
-    _playerStateSubscription?.cancel(); // Cancel the stream
-
-    // Dispose the audio player resources
-    await _player.dispose(); // Dispose of the just_audio player
-
-    // Call the superclass stop method
-    return super.stop(); // 💡 CORRECT: Use the stop method for final cleanup
+    await _player.stop();
+    await _player.seek(Duration.zero); // Reset position
   }
 
-  @override
   Future<void> skipToNext() async {
     if (_player.hasNext) {
       await _player.seekToNext();
@@ -124,40 +113,12 @@ class Mp3PlayerHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     }
   }
 
-  // Other overrides (skipToPrevious, seek, etc.) should also be implemented.
-
-  void _updatePlaybackState() {
-    playbackState.add(
-      playbackState.value.copyWith(
-        controls: [
-          // Define controls (play, pause, next, previous)
-        ],
-        systemActions: const {
-          MediaAction.play,
-          MediaAction.pause,
-          MediaAction.stop,
-          MediaAction.skipToNext,
-          MediaAction.skipToPrevious,
-        },
-        androidCompactActionIndices: const [0, 1, 2],
-        processingState: {
-          ProcessingState.idle: AudioProcessingState.idle,
-          ProcessingState.loading: AudioProcessingState.loading,
-          ProcessingState.buffering: AudioProcessingState.buffering,
-          ProcessingState.ready: AudioProcessingState.ready,
-          ProcessingState.completed: AudioProcessingState.completed,
-        }[_player.processingState]!,
-        playing: _player.playing,
-        updatePosition: _player.position,
-        queueIndex: _player.currentIndex,
-      ),
-    );
-  }
-
-  @override
+  // Optional: Add a dispose method for app-wide cleanup
   void dispose() {
     _playerStateSubscription?.cancel();
     _player.dispose();
-    super.stop();
   }
+
+  // Note: Removed 'skipToPrevious', 'seek', and '_updatePlaybackState'
+  // as they were tied to BaseAudioHandler which this class no longer extends.
 }

@@ -244,10 +244,10 @@
       proguardRules="proguard.txt"/>
   <library
       name=":@@:just_audio::release"
-      jars="D:\.gradle\caches\8.12\transforms\43379c309f0417c138180ac69aa1fe97\transformed\out\jars\classes.jar;D:\.gradle\caches\8.12\transforms\43379c309f0417c138180ac69aa1fe97\transformed\out\jars\libs\R.jar"
+      jars="D:\.gradle\caches\8.12\transforms\9bcdaca63a437e3fa7b0808cb1975d74\transformed\out\jars\classes.jar;D:\.gradle\caches\8.12\transforms\9bcdaca63a437e3fa7b0808cb1975d74\transformed\out\jars\libs\R.jar"
       resolved="com.ryanheise.just_audio:just_audio:1.0"
-      partialResultsDir="C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\just_audio-0.9.46\android\build\intermediates\lint_vital_partial_results\release\lintVitalAnalyzeRelease\out"
-      folder="D:\.gradle\caches\8.12\transforms\43379c309f0417c138180ac69aa1fe97\transformed\out"
+      partialResultsDir="C:\Users\govar\AppData\Local\Pub\Cache\hosted\pub.dev\just_audio-0.10.5\android\build\intermediates\lint_vital_partial_results\release\lintVitalAnalyzeRelease\out"
+      folder="D:\.gradle\caches\8.12\transforms\9bcdaca63a437e3fa7b0808cb1975d74\transformed\out"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
