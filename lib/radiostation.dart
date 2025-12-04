@@ -1,14 +1,33 @@
 import 'package:audio_service/audio_service.dart';
+import 'package:hive/hive.dart';
 
+part 'radiostation.g.dart';
+
+@HiveType(typeId: 0)
 class RadioStation {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String name;
-  final String streamUrl;
+
+  @HiveField(2)
   final String? logoUrl;
-  final String? language; // Lowercase 'language' in Dart model
-  final String? genre; // Field is for the descriptive genre
-  final String? state; // Field is for the location/state
-  final String? page; // Field is for the location/state
+
+  @HiveField(3)
+  final String? streamUrl;
+
+  @HiveField(4)
+  final String? language;
+
+  @HiveField(5)
+  final String? genre;
+
+  @HiveField(6)
+  final String? state;
+
+  @HiveField(7)
+  final String? page;
 
   const RadioStation({
     required this.id,

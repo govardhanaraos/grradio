@@ -10,6 +10,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  shimmer: ^3.0.0  # Add this line
+  hive: ^2.2.3     # Ensure other packages are also here
+  hive_flutter: ^1.1.0
   google_mobile_ads: ^6.0.0 # Use the latest stable version
   audio_service: ^0.18.12
   just_audio: ^0.10.5
@@ -27,6 +30,9 @@ dependencies:
   intl: ^0.20.2 # Or the latest stable version
   xml: ^6.4.2  # Add this line
   html: ^0.15.1  # Add this line for HTML parsing
+  rxdart: ^0.27.7
+  flutter_native_splash: ^2.4.7
+  flutter_launcher_icons: ^0.14.4
 
 # pubspec.yaml
 
@@ -34,8 +40,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0
-  flutter_native_splash: ^2.3.1
-  flutter_launcher_icons: ^0.13.1
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.6
 
 flutter:
   uses-material-design: true
@@ -48,18 +54,24 @@ flutter_native_splash:
   color: "#FFFFFF" # Use a color that matches your app's theme (e.g., white)
 
   # 💡 CRITICAL: Define the path to your large logo image
-  image: assets/images/gr_radio_logo_vibgyor.png
+  image: assets/images/gr_radio_native_splash.png
 
   # OPTIONAL: Set a maximum size for the image (as a fraction of the screen)
   # Recommended for a big logo
-  image_android: assets/images/gr_radio_logo_vibgyor.png
-  image_ios: assets/images/gr_radio_logo_vibgyor.png
+  image_android: assets/images/gr_radio_native_splash.png
+  image_ios: assets/images/gr_radio_native_splash.png
 
   # Android Specific (controls size):
   # Set this to true to cover the entire screen (usually for background images)
   # or false to center the image with padding (best for logos).
   android_12:
-    image: assets/images/gr_radio_logo_vibgyor.png
+    image: assets/images/gr_radio_native_splash.png
+
+  branding: assets/images/gr_radio_native_splash.png # optional for bottom branding
+  android: true
+  ios: true
+  web: false
+  fullscreen: true
 
   # iOS Specific (controls size):
   # You can control the positioning on iOS using the 'branding' image or similar
@@ -72,8 +84,9 @@ flutter_launcher_icons:
   ios: true
 
   # 💡 Path to your logo image (use a PNG with transparent background if possible)
-  image_path: "assets/icons/gr_radio_launch_logo_vibgyor.png"
+  image_path: "assets/icons/gr_radio_launcher_icon.png"
 
   # Configuration for Android Adaptive Icons:
   adaptive_icon_background: "#FFFFFF" # Use a solid color (e.g., white) or a path to a background image
-  adaptive_icon_foreground: "assets/icons/gr_radio_launch_logo_vibgyor.png" # Path to your logo
+  adaptive_icon_foreground: "assets/icons/gr_radio_launcher_icon.png" # Path to your logo
+  remove_alpha_ios: true

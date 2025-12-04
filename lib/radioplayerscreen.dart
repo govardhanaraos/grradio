@@ -11,6 +11,7 @@ import 'package:grradio/main.dart';
 import 'package:grradio/radioplayerhandler.dart';
 import 'package:grradio/radiostation.dart';
 import 'package:grradio/responsebutton.dart';
+import 'package:shimmer/shimmer.dart';
 
 class RadioPlayerScreen extends StatefulWidget {
   final Function(bool) onRecordingStatusChanged;
@@ -47,6 +48,23 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+
+  String _selectedLanguage = 'All';
+  bool _isListView = true; // true for ListView, false for Icon/GridView
+
+  // 💡 NEW: Define the list of languages/categories
+  final List<String> _languages = [
+    'All',
+    'Telugu',
+    'Arabi',
+    'Tamil',
+    'Hindi',
+    'English',
+    'Kannada',
+    'Malayalam',
+    'Punjabi',
+    'Bengali',
+  ]; // Add more as needed
 
   @override
   void initState() {
@@ -121,24 +139,27 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   }
 
   List<RadioStation> get _filteredStations {
-    if (_searchQuery.isEmpty) {
-      return allRadioStations;
-    }
-    final query = _searchQuery.toLowerCase();
+    Iterable<RadioStation> stations = allRadioStations;
+    String query = _searchQuery.toLowerCase();
+    if (query == 'Arabi') query = 'saudi';
 
-    return allRadioStations
-        .where(
-          (station) =>
-              // Search by Name (e.g., "Akashvani Kanpur")
-              station.name.toLowerCase().contains(query) ||
-              // Search by State (e.g., "UTTAR PRADESH") - Now correctly mapped to station.state
-              (station.state?.toLowerCase().contains(query) ?? false) ||
-              // Search by Language (e.g., "Hindi") - Now correctly mapped to station.language
-              (station.language?.toLowerCase().contains(query) ?? false) ||
-              // Search by Language (e.g., "Hindi") - Now correctly mapped to station.language
-              (station.page?.toLowerCase().contains(query) ?? false),
-        )
-        .toList();
+    if (_searchQuery.isNotEmpty) {
+      stations = stations.where(
+        (station) =>
+            station.name.toLowerCase().contains(query) ||
+            (station.state?.toLowerCase().contains(query) ?? false) ||
+            (station.language?.toLowerCase().contains(query) ?? false) ||
+            (station.page?.toLowerCase().contains(query) ?? false),
+      );
+    }
+
+    if (_selectedLanguage != 'All') {
+      final selectedLanguageLower = _selectedLanguage.toLowerCase();
+      stations = stations.where(
+        (station) => (station.language?.toLowerCase() == selectedLanguageLower),
+      );
+    }
+    return stations.toList();
   }
 
   void _toggleRecording() async {
@@ -321,6 +342,9 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       ),
       body: Column(
         children: [
+          //_buildLanguageFilterBar(),
+          //_buildViewSwitcherAndCount(),
+          _buildControlBar(context),
           Expanded(child: _buildStationsList()),
           BannerAdWidget(),
         ],
@@ -330,9 +354,121 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
-  // ... inside _RadioPlayerScreenState
+  Widget _buildControlBar(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final double h = size.height;
+    final double w = size.width;
 
-  // 💡 NEW: Logic to show Rewarded Ad
+    final double barHeight = h * 0.07;
+    final double fontSize = h * 0.018;
+    final double iconSize = w * 0.065;
+    final double chipHeight = h * 0.045;
+
+    return Container(
+      height: barHeight,
+      padding: EdgeInsets.symmetric(horizontal: w * 0.02, vertical: h * 0.01),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // LEFT SIDE: Scrollable Language Buttons
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _languages.length,
+              separatorBuilder: (ctx, index) => SizedBox(width: w * 0.02),
+              itemBuilder: (context, index) {
+                final language = _languages[index];
+                final isSelected = language == _selectedLanguage;
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedLanguage = language;
+                    });
+                  },
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: EdgeInsets.symmetric(horizontal: w * 0.04),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blueAccent : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.blueAccent
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                    child: Text(
+                      language,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.blueGrey[700],
+                        fontSize: fontSize,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // SPACER / DIVIDER
+          Container(
+            margin: EdgeInsets.symmetric(horizontal: w * 0.02),
+            width: 1,
+            height: chipHeight * 0.8,
+            color: Colors.grey[300],
+          ),
+
+          // RIGHT SIDE: View Switcher Icons
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // List View Icon
+              InkWell(
+                onTap: () => setState(() => _isListView = true),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.view_list_rounded,
+                    size: iconSize,
+                    color: _isListView ? Colors.blueAccent : Colors.grey[400],
+                  ),
+                ),
+              ),
+              SizedBox(width: w * 0.01),
+              // Grid/Icon View Icon
+              InkWell(
+                onTap: () => setState(() => _isListView = false),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.grid_view_rounded,
+                    size: iconSize,
+                    color: !_isListView ? Colors.blueAccent : Colors.grey[400],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showRewardedAdForReward() {
     AdHelper.showRewardedAd(
       // Callback if the user successfully watches the ad
@@ -372,27 +508,24 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           return const SizedBox.shrink();
         }
 
-        final screenHeight = MediaQuery.of(context).size.height;
+        final size = MediaQuery.of(context).size;
+        final double screenHeight = size.height;
+        // 💡 EXPANDED HEIGHT ADJUSTMENT
         final double expandedHeight = screenHeight * 0.80;
-        final double miniHeight = RButton.getLargeButtonSize();
-        final double cornerRadius = 20.0;
+        final double miniHeight = screenHeight * 0.1; // ~8-10% for mini player
 
-        // Determine the current height for the container.
-        // Use _draggedHeight during expansion/drag, or the fixed expanded/mini height.
         final currentHeight = isExpanded
             ? _draggedHeight ?? expandedHeight
             : miniHeight;
-        // NOTE: _draggedHeight must be a state variable initialized to expandedHeight
-        // when the player first expands.
 
         return AnimatedContainer(
           duration: Duration(milliseconds: 300),
           height: currentHeight, // Use the dynamic currentHeight
           decoration: BoxDecoration(
-            color: Colors.grey[200],
+            color: Colors.white, // Ensure white background
             borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(isExpanded ? cornerRadius : 12),
-              topRight: Radius.circular(isExpanded ? cornerRadius : 12),
+              topLeft: Radius.circular(isExpanded ? 20 : 12),
+              topRight: Radius.circular(isExpanded ? 20 : 12),
             ),
             boxShadow: [
               BoxShadow(
@@ -405,34 +538,20 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
           child: GestureDetector(
             onVerticalDragUpdate: isExpanded
                 ? (details) {
-                    // --- START: Drag Animation Logic ---
-                    // Calculate new height by subtracting the vertical drag delta (downwards drag is positive delta.dy)
-
                     final rawNewHeight = currentHeight - details.delta.dy;
-
-                    // 1. 🛑 CLAMP THE HEIGHT TO PREVENT NEGATIVE CONSTRAINTS 🛑
-                    final clampedNewHeight = rawNewHeight.clamp(
-                      miniHeight,
-                      expandedHeight,
-                    );
-
-                    // Update the state variable to trigger the sheet redraw
-                    // You need to call setState in the parent widget here:
-                    /* setState(() {
-                    _draggedHeight = newHeight.clamp(miniHeight, expandedHeight);
-                  });
-                  */
-                    // --- END: Drag Animation Logic ---
+                    setState(() {
+                      _draggedHeight = rawNewHeight.clamp(
+                        miniHeight,
+                        expandedHeight,
+                      );
+                    });
                   }
                 : null,
 
             onVerticalDragEnd: isExpanded
                 ? (details) {
-                    // --- START: Drag Dismissal Logic ---
-                    final double dragThreshold =
-                        expandedHeight * 0.5; // Dismiss if dragged past 50%
-                    final double velocityThreshold =
-                        500; // Dismiss if swiped fast
+                    final double dragThreshold = expandedHeight * 0.5;
+                    final double velocityThreshold = 500;
 
                     if (currentHeight < dragThreshold ||
                         details.primaryVelocity! > velocityThreshold) {
@@ -452,13 +571,14 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                     // --- END: Drag Dismissal Logic ---
                   }
                 : null,
-
             onTap: isExpanded
                 ? null
                 : () {
-                    // Your logic here to set _isPlayerExpanded = true
+                    setState(() {
+                      _isPlayerExpanded = true;
+                      _draggedHeight = expandedHeight;
+                    });
                   },
-
             child: isExpanded
                 ? _buildExpandedPlayer(mediaItem)
                 : _buildMiniPlayer(mediaItem),
@@ -469,8 +589,13 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
   }
 
   Widget _buildExpandedPlayer(MediaItem mediaItem) {
+    final size = MediaQuery.of(context).size;
+    final double screenHeight = size.height;
+    final double screenWidth = size.width;
+
     return Container(
       decoration: const BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
@@ -478,316 +603,138 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
       ),
       child: Column(
         children: [
-          // Header with minimize button
-          Container(
-            height: RButton.getMediumButtonSize(),
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Text(
-                  'Now Playing',
-                  style: TextStyle(
-                    fontSize: RButton.getMediumFontSize(),
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blueGrey[800],
+          // 1. Header (Dynamic Height)
+          SizedBox(
+            height: screenHeight * 0.08,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
+              child: Row(
+                children: [
+                  Text(
+                    'Now Playing',
+                    style: TextStyle(
+                      fontSize: screenHeight * 0.025,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueGrey[800],
+                    ),
                   ),
-                ),
-                Spacer(),
-                IconButton(
-                  icon: Icon(
-                    Icons.keyboard_arrow_down,
-                    color: Colors.blueGrey[600],
-                    size: RButton.getMediumFontSize() * 1.5,
+                  Spacer(),
+                  IconButton(
+                    icon: Icon(
+                      Icons.keyboard_arrow_down,
+                      color: Colors.blueGrey[600],
+                      size: screenHeight * 0.04,
+                    ),
+                    onPressed: _minimizePlayer,
                   ),
-                  onPressed: _minimizePlayer,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           Divider(height: 1, color: Colors.blueGrey[100]),
 
           // Station image and info
           Expanded(
-            flex: 3,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(20, 10, 20, 10),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: RButton.getXXLargeImageSize() * 1.1,
-                    height: RButton.getXXLargeImageSize() * 1.1,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black38,
-                          blurRadius: RButton.getXLargeSpacing() * 1.5,
-                          offset: Offset(0, 8),
-                        ),
-                      ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Get available dimensions inside the sheet
+                final double h = constraints.maxHeight;
+                final double w = constraints.maxWidth;
+
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // ARTWORK (Responsive)
+                    Container(
+                      height: h * 0.35, // 35% of available sheet height
+                      width: h * 0.35, // Keep it square
+                      constraints: BoxConstraints(
+                        maxHeight: w * 0.8, // Do not exceed 80% width
+                        maxWidth: w * 0.8,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 15,
+                            offset: Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: mediaItem.artUri != null
+                            ? Image.network(
+                                mediaItem.artUri.toString(),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _buildPlaceholderArt(),
+                              )
+                            : _buildPlaceholderArt(),
+                      ),
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: mediaItem.artUri != null
-                          ? Image.network(
-                              mediaItem.artUri.toString(),
-                              fit: BoxFit.cover,
-                              loadingBuilder:
-                                  (context, child, loadingProgress) {
-                                    if (loadingProgress == null) return child;
-                                    return Center(
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.0,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.blueAccent,
-                                            ),
-                                        value:
-                                            loadingProgress
-                                                    .expectedTotalBytes !=
-                                                null
-                                            ? loadingProgress
-                                                      .cumulativeBytesLoaded /
-                                                  loadingProgress
-                                                      .expectedTotalBytes!
-                                            : null,
-                                      ),
-                                    );
-                                  },
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Colors.blueGrey[200],
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.radio,
-                                      size: RButton.getMediumContainerSize(),
-                                      color: Colors.blueGrey[400],
-                                    ),
+
+                    // INFO (Title + Genre)
+                    SizedBox(
+                      height: h * 0.15,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: w * 0.1),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // MARQUEE TITLE (Auto Scrolling)
+                            SizedBox(
+                              height: h * 0.08,
+                              child: MarqueeWidget(
+                                child: Text(
+                                  mediaItem.title,
+                                  style: TextStyle(
+                                    fontSize:
+                                        screenHeight * 0.03, // Responsive Font
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.blueGrey[900],
                                   ),
-                                );
-                              },
-                            )
-                          : Container(
-                              color: Colors.blueGrey[200],
-                              child: Center(
-                                child: Icon(
-                                  Icons.radio,
-                                  size: RButton.getMediumContainerSize(),
-                                  color: Colors.blueGrey[400],
                                 ),
                               ),
                             ),
-                    ),
-                  ),
-                  SizedBox(height: RButton.getXLargeSpacing()),
-                  Text(
-                    mediaItem.title,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: RButton.getLargeFontSize() * 1.2,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.blueGrey[900],
-                    ),
-                  ),
-                  SizedBox(height: RButton.getSmallSpacing()),
-                  Text(
-                    mediaItem.genre ?? 'Radio Stream',
-                    style: TextStyle(
-                      fontSize: RButton.getMediumFontSize(),
-                      color: Colors.grey[500],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Controls section
-          Expanded(
-            flex: 2,
-            child: Padding(
-              padding: EdgeInsets.all(20), // Reduced padding for better fit
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Control buttons - FIXED: Stable layout
-                  StreamBuilder<PlaybackState>(
-                    stream: _audioHandler.playbackState,
-                    builder: (context, snapshot) {
-                      final playing = snapshot.data?.playing ?? false;
-                      final processingState = snapshot.data?.processingState;
-                      final isLoading =
-                          processingState == AudioProcessingState.loading;
-
-                      final Color primaryControlColor = Colors.deepOrangeAccent;
-                      final Color secondaryControlColor =
-                          Colors.deepOrange[50]!;
-                      final double mainButtonSize =
-                          RButton.getMainControlButtonSize();
-
-                      Widget _buildBeautifulControlButton({
-                        required IconData icon,
-                        required VoidCallback? onPressed,
-                        required double size,
-                        required double iconSize,
-                        required Color backgroundColor,
-                        required Color iconColor,
-                      }) {
-                        return Container(
-                          width: size,
-                          height: size,
-                          decoration: BoxDecoration(
-                            color: backgroundColor,
-                            shape: BoxShape.circle,
-                            boxShadow: onPressed != null
-                                ? [
-                                    BoxShadow(
-                                      color: backgroundColor.withOpacity(0.5),
-                                      blurRadius: 10,
-                                      offset: Offset(0, 5),
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: IconButton(
-                            icon: Icon(icon),
-                            iconSize: iconSize,
-                            color: iconColor,
-                            onPressed: onPressed,
-                            padding: EdgeInsets.zero,
-                          ),
-                        );
-                      }
-
-                      return Container(
-                        height:
-                            mainButtonSize *
-                            1.2, // Fixed height to prevent shifting
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Previous button
-                            _buildBeautifulControlButton(
-                              icon: Icons.skip_previous_rounded,
-                              onPressed: _isRecording
-                                  ? null
-                                  : _audioHandler.skipToPrevious,
-                              size: mainButtonSize * 0.6,
-                              iconSize: mainButtonSize * 0.4,
-                              backgroundColor: secondaryControlColor,
-                              iconColor: primaryControlColor,
-                            ),
-
-                            SizedBox(width: RButton.getXXLargeSpacing()),
-
-                            // Play/Pause button with stable loading indicator
-                            Container(
-                              width: mainButtonSize, // Fixed width
-                              height: mainButtonSize, // Fixed height
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  // Loading indicator - positioned absolutely
-                                  if (isLoading)
-                                    Positioned.fill(
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 4,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              primaryControlColor.withOpacity(
-                                                0.5,
-                                              ),
-                                            ),
-                                      ),
-                                    ),
-                                  // Play/Pause button - always present
-                                  _buildBeautifulControlButton(
-                                    icon: playing
-                                        ? Icons.pause_rounded
-                                        : Icons.play_arrow_rounded,
-                                    size: mainButtonSize * 0.8,
-                                    iconSize: mainButtonSize * 0.5,
-                                    onPressed: _isRecording
-                                        ? null
-                                        : (playing
-                                              ? _audioHandler.pause
-                                              : _audioHandler.play),
-                                    backgroundColor: primaryControlColor,
-                                    iconColor: Colors.white,
-                                  ),
-                                ],
+                            SizedBox(height: h * 0.01),
+                            Text(
+                              mediaItem.genre ?? 'Radio Stream',
+                              style: TextStyle(
+                                fontSize: screenHeight * 0.02,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
                               ),
-                            ),
-
-                            SizedBox(width: RButton.getXXLargeSpacing()),
-
-                            // Next button
-                            _buildBeautifulControlButton(
-                              icon: Icons.skip_next_rounded,
-                              onPressed: _isRecording
-                                  ? null
-                                  : _audioHandler.skipToNext,
-                              size: mainButtonSize * 0.6,
-                              iconSize: mainButtonSize * 0.4,
-                              backgroundColor: secondaryControlColor,
-                              iconColor: primaryControlColor,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    ),
 
-                  SizedBox(
-                    height: RButton.getLargeSpacing(),
-                  ), // Reduced spacing
-                  // Recording and additional buttons
-                  Wrap(
-                    spacing: 20,
-                    runSpacing: 10,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      _buildActionButton(
-                        icon: _isRecording
-                            ? Icons.stop_rounded
-                            : Icons.fiber_manual_record_rounded,
-                        label: _isRecording ? 'Stop Recording' : 'Record',
-                        color: _isRecording
-                            ? Colors.redAccent
-                            : Colors.blueGrey,
-                        onPressed: _toggleRecording,
+                    // CONTROLS & ACTIONS
+                    SizedBox(
+                      height: h * 0.35, // 35% allocated for buttons
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Playback Icons
+                          _buildPlaybackControls(screenHeight, w),
+
+                          Spacer(),
+
+                          // Record Actions
+                          _buildBottomActions(screenHeight, w),
+
+                          SizedBox(height: h * 0.05),
+                        ],
                       ),
-                      SizedBox(width: RButton.getXLargeSpacing()),
-                      _buildActionButton(
-                        icon: CupertinoIcons.recordingtape,
-                        label: 'Recordings',
-                        color: _isRecording ? Colors.grey : Colors.blueGrey,
-                        onPressed: _isRecording
-                            ? () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Cannot switch to MP3 Player while radio recording is active.',
-                                    ),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                              }
-                            : () async {
-                                await _audioHandler.pause();
-                                widget.onNavigateToRecordings();
-                              },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -795,7 +742,149 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
+  Widget _buildPlaceholderArt() {
+    return Container(
+      color: Colors.grey[200],
+      child: Center(
+        child: Icon(Icons.radio, size: 60, color: Colors.grey[400]),
+      ),
+    );
+  }
+
+  // Helper for Controls using MediaQuery
+  Widget _buildPlaybackControls(double screenH, double screenW) {
+    return StreamBuilder<PlaybackState>(
+      stream: _audioHandler.playbackState,
+      builder: (context, snapshot) {
+        final playing = snapshot.data?.playing ?? false;
+        final processingState = snapshot.data?.processingState;
+        final isLoading = processingState == AudioProcessingState.loading;
+
+        final double mainIconSize = screenW * 0.18; // 18% of screen width
+        final double sideIconSize = screenW * 0.12; // 12% of screen width
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            IconButton(
+              icon: Icon(Icons.skip_previous_rounded),
+              iconSize: sideIconSize,
+              color: Colors.deepOrangeAccent,
+              onPressed: _isRecording ? null : _audioHandler.skipToPrevious,
+            ),
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                if (isLoading)
+                  SizedBox(
+                    width: mainIconSize,
+                    height: mainIconSize,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 4,
+                      color: Colors.deepOrangeAccent,
+                    ),
+                  ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.deepOrangeAccent,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.deepOrangeAccent.withOpacity(0.4),
+                        blurRadius: 10,
+                        offset: Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    ),
+                    iconSize: mainIconSize * 0.6,
+                    color: Colors.white,
+                    onPressed: _isRecording
+                        ? null
+                        : (playing ? _audioHandler.pause : _audioHandler.play),
+                  ),
+                ),
+              ],
+            ),
+            IconButton(
+              icon: Icon(Icons.skip_next_rounded),
+              iconSize: sideIconSize,
+              color: Colors.deepOrangeAccent,
+              onPressed: _isRecording ? null : _audioHandler.skipToNext,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Helper for Bottom Actions (Record)
+  Widget _buildBottomActions(double screenH, double screenW) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildResponsiveActionButton(
+          icon: _isRecording
+              ? Icons.stop_rounded
+              : Icons.fiber_manual_record_rounded,
+          label: _isRecording ? 'Stop' : 'Record',
+          color: _isRecording ? Colors.redAccent : Colors.blueGrey,
+          onTap: _toggleRecording,
+          screenH: screenH,
+        ),
+        SizedBox(width: screenW * 0.1),
+        _buildResponsiveActionButton(
+          icon: CupertinoIcons.recordingtape,
+          label: 'Recordings',
+          color: _isRecording ? Colors.grey : Colors.blueGrey,
+          onTap: _isRecording
+              ? () {}
+              : () async {
+                  await _audioHandler.pause();
+                  widget.onNavigateToRecordings();
+                },
+          screenH: screenH,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildResponsiveActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+    required double screenH,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: EdgeInsets.all(screenH * 0.015),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Icon(icon, color: color, size: screenH * 0.03),
+          ),
+          SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: screenH * 0.015, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMiniPlayer(MediaItem mediaItem) {
+    final size = MediaQuery.of(context).size;
+    final double screenH = size.height;
+
     return StreamBuilder<PlaybackState>(
       stream: _audioHandler.playbackState,
       builder: (context, snapshot) {
@@ -805,15 +894,16 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
 
         return Container(
           padding: EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.center,
           child: Row(
             children: [
               // Station image thumbnail
               Container(
-                width: RButton.getActionButtonSize(),
-                height: RButton.getActionButtonSize(),
+                width: screenH * 0.06,
+                height: screenH * 0.06,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
-                  color: Colors.blueGrey[100],
+                  color: Colors.grey[200],
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -821,23 +911,10 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
                       ? Image.network(
                           mediaItem.artUri.toString(),
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Center(
-                              child: Icon(
-                                Icons.radio,
-                                size: RButton.getActionIconSize(),
-                                color: Colors.blueGrey[300],
-                              ),
-                            );
-                          },
+                          errorBuilder: (_, __, ___) =>
+                              Icon(Icons.radio, color: Colors.grey),
                         )
-                      : Center(
-                          child: Icon(
-                            Icons.radio,
-                            size: RButton.getActionIconSize(),
-                            color: Colors.blueGrey[300],
-                          ),
-                        ),
+                      : Icon(Icons.radio, color: Colors.grey),
                 ),
               ),
 
@@ -846,93 +923,52 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
               // Station info
               Expanded(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       mediaItem.title,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: RButton.getSmallFontSize(),
+                        fontSize: screenH * 0.018,
                         color: Colors.blueGrey[800],
                       ),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       mediaItem.genre ?? 'Radio',
                       style: TextStyle(
-                        fontSize: RButton.getSmallFontSize(),
+                        fontSize: screenH * 0.016,
                         color: Colors.grey[600],
                       ),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-
-              // Mini controls
-              Row(
-                children: [
-                  // Previous button
-                  IconButton(
-                    icon: Icon(
-                      Icons.skip_previous,
-                      size: RButton.getActionIconSize(),
-                    ),
-                    onPressed: _isRecording
-                        ? null
-                        : _audioHandler.skipToPrevious,
-                    color: Colors.blueGrey,
+              if (isLoading)
+                Padding(
+                  padding: EdgeInsets.all(8),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              if (!isLoading)
+                IconButton(
+                  icon: Icon(
+                    playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                   ),
-
-                  // Play/Pause button
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      if (isLoading)
-                        SizedBox(
-                          width: RButton.getActionIconSize(),
-                          height: RButton.getActionIconSize(),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.blueAccent,
-                          ),
-                        ),
-                      IconButton(
-                        icon: Icon(
-                          playing ? Icons.pause : Icons.play_arrow,
-                          size: 24,
-                        ),
-                        onPressed: _isRecording
-                            ? null
-                            : (playing
-                                  ? _audioHandler.pause
-                                  : _audioHandler.play),
-                        color: Colors.blueGrey,
-                      ),
-                    ],
-                  ),
-
-                  // Next button
-                  IconButton(
-                    icon: Icon(
-                      Icons.skip_next,
-                      size: RButton.getListIconSize(),
-                    ),
-                    onPressed: _isRecording ? null : _audioHandler.skipToNext,
-                    color: Colors.blueGrey,
-                  ),
-
-                  // Expand button
-                  IconButton(
-                    icon: Icon(
-                      Icons.expand_less,
-                      size: RButton.getListIconSize(),
-                    ),
-                    onPressed: _togglePlayerSheet,
-                    color: Colors.blueGrey,
-                  ),
-                ],
+                  iconSize: screenH * 0.045,
+                  color: Colors.blueGrey[800],
+                  onPressed: _isRecording
+                      ? null
+                      : (playing ? _audioHandler.pause : _audioHandler.play),
+                ),
+              IconButton(
+                icon: Icon(Icons.expand_less_rounded),
+                iconSize: screenH * 0.04,
+                color: Colors.blueGrey[600],
+                onPressed: _togglePlayerSheet,
               ),
             ],
           ),
@@ -941,151 +977,351 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onPressed,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: RButton.getListItemHeight(),
-          height: RButton.getListItemHeight(),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: IconButton(
-            icon: Icon(icon, color: color),
-            onPressed: onPressed,
-          ),
-        ),
-        SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 12, color: color)),
-      ],
+  Widget _buildStationsList() {
+    final stationsToShow = _filteredStations;
+    final size = MediaQuery.of(context).size;
+
+    return ValueListenableBuilder<List<RadioStation>>(
+      valueListenable: stationsNotifier, // Imported from main.dart
+      builder: (context, stations, child) {
+        // 1. Show Skeleton if data is empty (First launch, no cache, slow internet)
+        if (stations.isEmpty) {
+          return StationSkeletonList();
+        }
+
+        // Apply filters locally on the updated list
+        final stationsToShow = _applyFilters(stations);
+
+        // Empty Search Result
+        if (stationsToShow.isEmpty) {
+          return Center(child: Text("No stations found"));
+        }
+
+        return StreamBuilder<MediaItem?>(
+          stream: _audioHandler.mediaItem,
+          builder: (context, snapshot) {
+            final currentMediaId = snapshot.data?.id;
+
+            return _isListView
+                ? ListView.builder(
+                    padding: EdgeInsets.only(
+                      bottom: 100,
+                    ), // Space for bottom sheet
+                    itemCount: stationsToShow.length,
+                    itemBuilder: (context, index) {
+                      return _buildStationListTile(
+                        stationsToShow[index],
+                        currentMediaId,
+                      );
+                    },
+                  )
+                : GridView.builder(
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      16,
+                      16,
+                      100,
+                    ), // Space for bottom sheet
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 0.8, // Adjust ratio for Icon+Text
+                    ),
+                    itemCount: stationsToShow.length,
+                    itemBuilder: (context, index) {
+                      return _buildStationGridItem(
+                        stationsToShow[index],
+                        currentMediaId,
+                      );
+                    },
+                  );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildControlButton({
-    required IconData icon,
-    required VoidCallback? onPressed,
-    double iconSize = 36.0,
-    double width = 64.0,
-    double height = 64.0,
-    Color backgroundcolor = Colors.brown,
-  }) {
-    return SizedBox(
-      width: width,
-      height: height,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: backgroundcolor,
-          shape: CircleBorder(),
-          padding: EdgeInsets.zero,
-          elevation: 5,
-          disabledBackgroundColor: backgroundcolor.withOpacity(0.3),
+  List<RadioStation> _applyFilters(List<RadioStation> sourceList) {
+    Iterable<RadioStation> stations = sourceList;
+    String query = _searchQuery.toLowerCase();
+
+    if (_searchQuery.isNotEmpty) {
+      stations = stations.where(
+        (station) =>
+            station.name.toLowerCase().contains(query) ||
+            (station.language?.toLowerCase().contains(query) ?? false),
+      );
+    }
+
+    if (_selectedLanguage != 'All') {
+      final selectedLanguageLower = _selectedLanguage.toLowerCase();
+      stations = stations.where(
+        (station) => (station.language?.toLowerCase() == selectedLanguageLower),
+      );
+    }
+    return stations.toList();
+  }
+
+  Widget _buildStationGridItem(RadioStation station, String? currentMediaId) {
+    final isPlaying = currentMediaId == station.id;
+    final size = MediaQuery.of(context).size;
+
+    return InkWell(
+      onTap: () => _playStation(station),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isPlaying ? Colors.blue[50] : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isPlaying ? Colors.blueAccent : Colors.grey[200]!,
+            width: isPlaying ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
         ),
-        child: Icon(
-          icon,
-          size: iconSize,
-          color: onPressed == null ? backgroundcolor : Colors.black54,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Icon
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: station.logoUrl != null
+                      ? Image.network(
+                          station.logoUrl!,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) =>
+                              Icon(Icons.radio, color: Colors.grey),
+                        )
+                      : Icon(
+                          Icons.radio,
+                          size: size.width * 0.1,
+                          color: Colors.grey,
+                        ),
+                ),
+              ),
+            ),
+            // Text
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+              child: Text(
+                station.name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: size.height * 0.015, // Responsive font
+                  fontWeight: FontWeight.bold,
+                  color: isPlaying ? Colors.blue[800] : Colors.blueGrey[800],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildStationsList() {
-    return StreamBuilder<MediaItem?>(
-      stream: _audioHandler.mediaItem,
-      builder: (context, snapshot) {
-        final currentMediaId = snapshot.data?.id;
+  // 💡 NEW: Extracted List Tile Widget (Same logic as existing ListTile)
+  Widget _buildStationListTile(RadioStation station, String? currentMediaId) {
+    final isPlaying = currentMediaId == station.id;
 
-        return ListView.builder(
-          itemCount: _filteredStations.length,
-          itemBuilder: (context, index) {
-            final station = _filteredStations[index];
-            final isPlaying = currentMediaId == station.id;
-
-            return ListTile(
-              title: Text(
-                station.name,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: RButton.getSmallFontSize(),
-                  color: Colors.blueGrey[800],
-                ),
-                overflow: TextOverflow.ellipsis,
+    return ListTile(
+      // The content of your existing ListTile from _buildStationsList
+      title: Text(
+        station.name,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: RButton.getSmallFontSize(),
+          color: Colors.blueGrey[800],
+        ),
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(station.language ?? 'Radio Station'),
+      leading: station.logoUrl != null
+          ? Container(
+              width: RButton.getActionButtonSize() * 1.5,
+              height: RButton.getActionButtonSize() * 1.5,
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(8.0),
               ),
-              subtitle: Text(station.language ?? 'Radio Station'),
-              leading: station.logoUrl != null
-                  ? Container(
-                      width: RButton.getActionButtonSize() * 1.5,
-                      height: RButton.getActionButtonSize() * 1.5,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(8.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                child: Image.network(
+                  station.logoUrl!,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.0,
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                  loadingProgress.expectedTotalBytes!
+                            : null,
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8.0),
-                        child: Image.network(
-                          station.logoUrl!,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.0,
-                                value:
-                                    loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                          loadingProgress.expectedTotalBytes!
-                                    : null,
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return Center(
-                              child: Icon(
-                                Icons.broken_image,
-                                color: Colors.red[400],
-                                size: RButton.getListIconSize(),
-                              ),
-                            );
-                          },
-                        ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Center(
+                      child: Icon(
+                        Icons.broken_image,
+                        color: Colors.red[400],
+                        size: RButton.getListIconSize(),
                       ),
-                    )
-                  : CircleAvatar(
-                      child: Icon(Icons.radio, size: RButton.getListIconSize()),
-                    ),
-              trailing: isPlaying
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                    );
+                  },
+                ),
+              ),
+            )
+          : CircleAvatar(
+              child: Icon(Icons.radio, size: RButton.getListIconSize()),
+            ),
+      trailing: isPlaying
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'PLAYING',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: RButton.getExSmallFontSize(),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+          : const SizedBox.shrink(),
+      onTap: () {
+        _playStation(station);
+      },
+    );
+  }
+}
+
+// 💡 MARQUEE WIDGET IMPLEMENTATION
+class MarqueeWidget extends StatefulWidget {
+  final Widget child;
+  final Axis direction;
+  final Duration animationDuration;
+  final Duration pauseDuration;
+
+  const MarqueeWidget({
+    Key? key,
+    required this.child,
+    this.direction = Axis.horizontal,
+    this.animationDuration = const Duration(seconds: 4),
+    this.pauseDuration = const Duration(seconds: 2),
+  }) : super(key: key);
+
+  @override
+  _MarqueeWidgetState createState() => _MarqueeWidgetState();
+}
+
+class _MarqueeWidgetState extends State<MarqueeWidget> {
+  late ScrollController _scrollController;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startScrolling());
+  }
+
+  void _startScrolling() {
+    if (!mounted) return;
+    _timer = Timer.periodic(widget.animationDuration + widget.pauseDuration, (
+      timer,
+    ) async {
+      if (_scrollController.hasClients) {
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        if (maxScroll > 0) {
+          await _scrollController.animateTo(
+            maxScroll,
+            duration: widget.animationDuration,
+            curve: Curves.easeOut,
+          );
+          await Future.delayed(widget.pauseDuration);
+          if (_scrollController.hasClients) {
+            _scrollController.jumpTo(0.0);
+          }
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      controller: _scrollController,
+      scrollDirection: widget.direction,
+      physics: NeverScrollableScrollPhysics(), // Disable user scrolling
+      child: widget.child,
+    );
+  }
+}
+
+class StationSkeletonList extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: 10, // Show 10 dummy items
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Shimmer.fromColors(
+            baseColor: Colors.grey[300]!,
+            highlightColor: Colors.grey[100]!,
+            child: Row(
+              children: [
+                // Circle Skeleton (Logo)
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                SizedBox(width: 16),
+                // Text Skeletons
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        height: 12,
+                        color: Colors.white,
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'PLAYING',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: RButton.getExSmallFontSize(),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-              onTap: () {
-                _playStation(station);
-              },
-            );
-          },
+                      SizedBox(height: 8),
+                      Container(width: 100, height: 10, color: Colors.white),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );

@@ -11,7 +11,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
-  final _player = AudioPlayer();
+  // 💡 FIX 1: Configure AudioPlayer with aggressive buffering for live streams
+  final _player = AudioPlayer(
+    audioLoadConfiguration: const AudioLoadConfiguration(
+      // Use default constructors for platform-specific load controls
+      androidLoadControl: AndroidLoadControl(),
+      darwinLoadControl: DarwinLoadControl(),
+    ),
+  );
+
   RadioStation? _currentStation;
   bool _isLoading = false;
   bool _isRecording = false;
@@ -20,7 +28,7 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
   // Stream interruption recovery
   Timer? _recoveryTimer;
   int _reconnectAttempts = 0;
-  final int _maxReconnectAttempts = 3;
+  final int _maxReconnectAttempts = 5; // Increased attempts
   bool _isRecovering = false;
 
   // Dio components for stream recording
@@ -59,7 +67,17 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
           !_isLoading &&
           _currentStation != null &&
           !_isRecovering) {
-        if (_isIcecastShoutcastStream(_currentStation?.streamUrl ?? '')) {
+        // If it stops but we didn't ask it to, it might be a connection drop
+        print(
+          'Unexpected playback stop detected. ProcessingState: ${playerState.processingState}',
+        );
+
+        // Immediate check: If completed, it means player thought stream ended
+        if (playerState.processingState == ProcessingState.completed) {
+          _scheduleRecovery();
+        } else if (_isIcecastShoutcastStream(
+          _currentStation?.streamUrl ?? '',
+        )) {
           Future.delayed(Duration(seconds: 3), () {
             if (!_player.playing && !_isRecovering) {
               print('Unexpected playback stop detected for Icecast stream');
@@ -67,7 +85,6 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
             }
           });
         } else {
-          print('Unexpected playback stop detected');
           _scheduleRecovery();
         }
       }
@@ -76,25 +93,22 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     _player.processingStateStream.listen((processingState) {
       _isLoading = processingState == ProcessingState.loading;
 
-      // Handle completed state for live streams
+      // 💡 FIX 2: Handle 'completed' state which causes "stuck" audio
+      // Live streams should never "complete". If they do, restart them.
       if (processingState == ProcessingState.completed &&
-          playbackState.value.playing &&
           _currentStation != null) {
-        print('Stream completed unexpectedly - attempting recovery');
-        _scheduleRecovery();
+        print('Stream marked as completed (EOF) - restarting live stream...');
+        if (!_isRecovering) {
+          _attemptRecovery();
+        }
       }
     });
 
-    // Buffer monitoring
+    // 💡 FIX 3: Removed verbose print logging that was causing skipped frames
+    // Only keeping critical buffer low warnings
     _player.bufferedPositionStream.listen((position) {
-      final duration = _player.duration;
-      if (duration != null) {
-        final bufferPercentage =
-            (position.inSeconds / duration.inSeconds * 100);
-        print(
-          'Buffer: ${position.inSeconds}s (${bufferPercentage.toStringAsFixed(1)}%)',
-        );
-      }
+      // final duration = _player.duration;
+      // Logging disabled to prevent UI jank
     });
 
     // Error handling
@@ -134,9 +148,9 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     _reconnectAttempts++;
 
     try {
-      await _player.stop();
-      // Small delay to ensure clean stop
-      await Future.delayed(Duration(milliseconds: 500));
+      // Don't fully stop if possible, just reload
+      // await _player.stop();
+      // Instead of stop(), just try re-setting the source which is faster
       await _playStation(_currentStation!, isRecovery: true);
       _reconnectAttempts = 0;
       _isRecovering = false;
@@ -574,18 +588,32 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     RadioStation station, {
     bool isRecovery = false,
   }) async {
+    if (station.streamUrl == null) {
+      print("Error: streamUrl is null for station: ${station.name}");
+      customEvent.add({
+        'event': 'playback_error',
+        'station': station.name,
+        'error': 'Station stream URL is missing.',
+      });
+      return;
+    }
+
     if (!isRecovery) {
       _currentStation = station;
       mediaItem.add(station.toMediaItem());
     }
 
-    await _player.stop();
-    await Future.delayed(Duration(milliseconds: 100));
+    // 💡 FIX 4: Don't stop explicitly if recovering, just set source
+    // Stopping clears the buffer which we want to avoid if just glitching
+    if (!isRecovery) {
+      await _player.stop();
+      await Future.delayed(Duration(milliseconds: 100));
+    }
 
     print("Attempting to play: ${station.name}");
     print("Stream URL: ${station.streamUrl}");
 
-    String streamUrl = station.streamUrl;
+    String streamUrl = station.streamUrl!;
     Map<String, String> richHeaders = {
       'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -597,15 +625,15 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     };
 
     // Handle different types of streams
-    if (station.streamUrl.contains('radio.garden')) {
+    if (streamUrl.contains('radio.garden')) {
       richHeaders['Referer'] = 'https://radio.garden/';
       richHeaders['Origin'] = 'https://radio.garden';
-    } else if (station.streamUrl.contains('akashvani.gov.in')) {
+    } else if (streamUrl.contains('akashvani.gov.in')) {
       richHeaders['Referer'] = 'https://akashvani.gov.in/';
     }
 
     // Special handling for Icecast/Shoutcast streams
-    if (_isIcecastShoutcastStream(station.streamUrl)) {
+    if (_isIcecastShoutcastStream(streamUrl)) {
       await _playIcecastShoutcastStream(
         station,
         streamUrl,
@@ -616,14 +644,12 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     }
 
     // For problematic streams with SSL issues, try HTTP first
-    if (_hasSSLIssues(station.streamUrl)) {
+    if (_hasSSLIssues(streamUrl)) {
       await _playWithSSLWorkaround(station, streamUrl, richHeaders, isRecovery);
       return;
     }
 
     try {
-      _configurePlayerBuffering();
-
       if (streamUrl.toLowerCase().contains('.m3u8')) {
         await _player.setAudioSource(
           HlsAudioSource(Uri.parse(streamUrl), headers: richHeaders),
@@ -665,7 +691,7 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
           'error': error.toString(),
         });
 
-        if (!station.streamUrl.contains('radio.garden')) {
+        if (!streamUrl.contains('radio.garden')) {
           await _tryFallbackUrls(station, error, streamUrl);
         } else {
           await _trySimpleRadioGardenFallback(station);
@@ -752,9 +778,9 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
   // Get alternative URLs for problematic stations
   Future<List<String>> _getAlternativeUrls(RadioStation station) async {
     final alternatives = <String>[];
-
+    String streamUrl = station.streamUrl!;
     // Add domain-specific alternatives
-    if (station.streamUrl.contains('teluguoneradio.com')) {
+    if (streamUrl.contains('teluguoneradio.com')) {
       alternatives.addAll([
         'http://stream.teluguoneradio.com:8164/;stream/1', // HTTP version
         'https://stream.teluguoneradio.com:8164/stream', // Alternative path
@@ -762,10 +788,10 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
       ]);
     }
 
-    if (station.streamUrl.contains('radio.garden')) {
+    if (streamUrl.contains('radio.garden')) {
       final match = RegExp(
         r'listen/([^/]+)/channel\.mp3',
-      ).firstMatch(station.streamUrl);
+      ).firstMatch(streamUrl);
       if (match != null) {
         final channelId = match.group(1);
         alternatives.addAll([
@@ -795,7 +821,7 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     final isRedirectLoop = initialError.toString().contains(
       'Redirect loop detected',
     );
-    String referer = station.streamUrl.contains('akashvani.gov.in')
+    String referer = station.streamUrl!.contains('akashvani.gov.in')
         ? 'https://akashvani.gov.in/'
         : 'https://example.com/';
 
@@ -875,19 +901,6 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
     });
   }
 
-  // Update the _configurePlayerBuffering method to handle SSL issues
-  void _configurePlayerBuffering() {
-    try {
-      print('Configuring player for stable streaming...');
-      _player.setLoopMode(LoopMode.off);
-
-      // Set buffer duration for better live streaming
-      // Note: These settings might vary by just_audio version
-    } catch (e) {
-      print('Error configuring player: $e');
-    }
-  }
-
   // Special handling for Icecast/Shoutcast streams
   Future<void> _playIcecastShoutcastStream(
     RadioStation station,
@@ -899,9 +912,6 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
     // Clean up the stream URL - remove ;stream/1 suffix which can cause issues
     String cleanUrl = streamUrl;
-    /* if (cleanUrl.contains(';stream/')) {
-      cleanUrl = cleanUrl.split(';stream/').first;
-    }*/
 
     // Try different variations of the stream URL
     final streamVariations = [
@@ -953,12 +963,11 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
           return;
         } else {
           // If not actually playing, stop and try next variation
-          await _player.stop();
+          // Don't fully stop in loop, just let next setUrl handle it
           await Future.delayed(Duration(milliseconds: 100));
         }
       } catch (e) {
         print("Stream variation failed: $variation - $e");
-        await _player.stop();
         await Future.delayed(Duration(milliseconds: 100));
       }
     }
@@ -1009,7 +1018,7 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
       print("Trying simple Radio Garden fallback...");
 
       // Try with just the basic URL and no special headers
-      await _player.setUrl(station.streamUrl);
+      await _player.setUrl(station.streamUrl!);
       await _player.play();
       _updatePlaybackState();
       print("Simple fallback successful");
@@ -1028,7 +1037,7 @@ class RadioPlayerHandler extends BaseAudioHandler with SeekHandler {
       // to find alternative streams
       final match = RegExp(
         r'listen/([^/]+)/channel\.mp3',
-      ).firstMatch(station.streamUrl);
+      ).firstMatch(station.streamUrl!);
       if (match != null) {
         final channelId = match.group(1);
         print("Extracted channel ID: $channelId");

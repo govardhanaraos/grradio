@@ -162,209 +162,257 @@ class _Mp3DownloadScreenState extends State<Mp3DownloadScreen> {
             colors: [Colors.blueGrey.shade50, Colors.blueGrey.shade100],
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Language Dropdown
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedLanguage,
-                    decoration: InputDecoration(
-                      labelText: 'Select Language',
-                      border: InputBorder.none,
-                      icon: Icon(CupertinoIcons.globe, color: Colors.blueGrey),
-                    ),
-                    items: _languages.map((String language) {
-                      return DropdownMenuItem<String>(
-                        value: language,
-                        child: Text(language, style: TextStyle(fontSize: 16)),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        _selectedLanguage = newValue;
-                      });
-                    },
+        // 💡 FIX: Wrap content in SingleChildScrollView to prevent overflow on small screens
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Language Dropdown
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ),
-              ),
-
-              SizedBox(height: 20),
-
-              // File Type Dropdown
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedFileType,
-                    decoration: InputDecoration(
-                      labelText: 'Select Type',
-                      border: InputBorder.none,
-                      icon: Icon(CupertinoIcons.folder, color: Colors.blueGrey),
-                    ),
-                    items: _fileTypes.map((String type) {
-                      return DropdownMenuItem<String>(
-                        value: type,
-                        child: Text(type, style: TextStyle(fontSize: 16)),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        _selectedFileType = newValue;
-                      });
-                    },
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 20),
-
-              // Search Text Field
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: TextFormField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      labelText: 'Search Songs/Albums',
-                      hintText: 'Enter movie name, song, or artist...',
-                      border: InputBorder.none,
-                      icon: Icon(CupertinoIcons.search, color: Colors.blueGrey),
-                    ),
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 30),
-
-              // Search Button
-              _isLoading
-                  ? Center(child: CircularProgressIndicator())
-                  : Column(
-                      children: [
-                        ElevatedButton(
-                          onPressed: _searchMp3,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueGrey,
-                            foregroundColor: Colors.white,
-                            elevation: 6,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(CupertinoIcons.search, size: 20),
-                              SizedBox(width: 10),
-                              Text(
-                                'SEARCH MP3',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedLanguage,
+                      decoration: InputDecoration(
+                        labelText: 'Select Language',
+                        border: InputBorder.none,
+                        icon: Icon(
+                          CupertinoIcons.globe,
+                          color: Colors.blueGrey,
                         ),
-                        SizedBox(height: 10),
-                        // Old MP3 Button
-                        ElevatedButton(
-                          onPressed: _navigateToOldMp3,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                            elevation: 6,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(CupertinoIcons.music_note, size: 20),
-                              SizedBox(width: 10),
-                              Text(
-                                'OLD MP3',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                      ),
+                      items: _languages.map((String language) {
+                        return DropdownMenuItem<String>(
+                          value: language,
+                          child: Text(language, style: TextStyle(fontSize: 16)),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedLanguage = newValue;
+                        });
+                      },
                     ),
+                  ),
+                ),
 
-              SizedBox(height: 20),
+                SizedBox(height: 20),
 
-              // Info Card
-              Card(
-                elevation: 2,
-                color: Colors.blueGrey.withOpacity(0.1),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                // File Type Dropdown
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedFileType,
+                      decoration: InputDecoration(
+                        labelText: 'Select Type',
+                        border: InputBorder.none,
+                        icon: Icon(
+                          CupertinoIcons.folder,
+                          color: Colors.blueGrey,
+                        ),
+                      ),
+                      items: _fileTypes.map((String type) {
+                        return DropdownMenuItem<String>(
+                          value: type,
+                          child: Text(type, style: TextStyle(fontSize: 16)),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedFileType = newValue;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 20),
+
+                // Search Text Field
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextFormField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        labelText: 'Search Songs/Albums',
+                        hintText: 'Enter movie name, song, or artist...',
+                        border: InputBorder.none,
+                        icon: Icon(
+                          CupertinoIcons.search,
+                          color: Colors.blueGrey,
+                        ),
+                      ),
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 30),
+
+                // Search Button
+                _isLoading
+                    ? Center(child: CircularProgressIndicator())
+                    : Column(
                         children: [
-                          Icon(
-                            CupertinoIcons.info,
-                            color: Colors.blueGrey,
-                            size: 18,
+                          ElevatedButton(
+                            onPressed: _searchMp3,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueGrey,
+                              foregroundColor: Colors.white,
+                              elevation: 6,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(CupertinoIcons.search, size: 20),
+                                SizedBox(width: 10),
+                                Text(
+                                  'SEARCH MP3',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          SizedBox(width: 8),
-                          Text(
-                            'How to use:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blueGrey,
+                          // 💡 NEW: Separator with 'OR' Text
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16.0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Divider(
+                                    color: Colors.grey.shade400,
+                                    thickness: 1,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                  ),
+                                  child: Text(
+                                    'OR',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Divider(
+                                    color: Colors.grey.shade400,
+                                    thickness: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // 💡 END NEW Separator
+                          // Old MP3 Button
+                          ElevatedButton(
+                            onPressed: _navigateToOldMp3,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                              elevation: 6,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(CupertinoIcons.music_note, size: 20),
+                                SizedBox(width: 10),
+                                Text(
+                                  'OLD MP3',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
-                      Text(
-                        '1. Select your preferred language\n'
-                        '2. Choose the type of content\n'
-                        '3. Enter search keywords\n'
-                        '4. Click Search to find MP3 files\n'
-                        '5. Use Old MP3 for traditional browsing',
-                        style: TextStyle(color: Colors.blueGrey.shade700),
-                      ),
-                    ],
+
+                SizedBox(height: 30), // Increased separation before info card
+                // Info Card
+                Card(
+                  elevation: 2,
+                  color: Colors.blueGrey.withOpacity(0.1),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              CupertinoIcons.info,
+                              color: Colors.blueGrey,
+                              size: 18,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'How to use:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blueGrey,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          '1. Select your preferred language\n'
+                          '2. Choose the type of content\n'
+                          '3. Enter search keywords\n'
+                          '4. Click Search to find MP3 files\n'
+                          '5. Use Old MP3 for traditional browsing',
+                          style: TextStyle(color: Colors.blueGrey.shade700),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              SizedBox(height: 30), // Add separation
-              // 💡 NEW: Banner Ad at the bottom
-              Container(
-                alignment: Alignment.center,
-                height: 60,
-                child: const BannerAdWidget(),
-              ),
-            ],
+                // 💡 NEW: Separating the Info Card and the Ad
+                SizedBox(height: 20),
+
+                // 💡 Banner Ad at the bottom
+                Container(
+                  alignment: Alignment.center,
+                  height: 60,
+                  child: const BannerAdWidget(),
+                ),
+
+                // 💡 FIX: Add extra space at the very bottom after the ad
+                SizedBox(height: 30),
+              ],
+            ),
           ),
         ),
       ),

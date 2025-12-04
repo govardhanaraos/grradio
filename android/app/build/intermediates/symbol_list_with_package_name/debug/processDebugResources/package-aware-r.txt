@@ -975,6 +975,7 @@ drawable audio_service_skip_next
 drawable audio_service_skip_previous
 drawable audio_service_stop
 drawable background
+drawable branding
 drawable btn_checkbox_checked_mtrl
 drawable btn_checkbox_checked_to_unchecked_mtrl_animation
 drawable btn_checkbox_unchecked_mtrl

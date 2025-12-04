@@ -11,24 +11,135 @@ import 'package:grradio/radioplayerhandler.dart';
 import 'package:grradio/radioplayerscreen.dart';
 import 'package:grradio/radiostation.dart';
 import 'package:grradio/radiostationserviceapi.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:just_audio/just_audio.dart';
 
 final RadioStationServiceAPI _radioService = RadioStationServiceAPI();
-List<RadioStation> allRadioStations = [];
+final ValueNotifier<List<RadioStation>> stationsNotifier = ValueNotifier([]);
 
-Future<void> loadStations() async {
-  try {
-    final stations = await _radioService.fetchRadioStations();
+List<RadioStation> get allRadioStations => stationsNotifier.value;
 
-    // Now 'allRadioStations' contains the data from MongoDB
-    // You can now use this list to initialize your RadioPlayerHandler or UI.
-    print('Loaded ${allRadioStations.length} stations from MongoDB.');
-    print('Loaded Stations: ${allRadioStations}');
+const int limitPerPage = 50; // Use a consistent limit
+bool _isInitializing = false;
 
-    allRadioStations = stations;
-  } catch (e) {
-    print('Failed to load radio stations.');
+Future<void> initializeApp() async {
+  // 1. Init Hive
+  if (_isInitializing) {
+    print(
+      "App initialization already in progress or complete. Skipping second call.",
+    );
+    return;
   }
+  _isInitializing = true;
+
+  await Hive.initFlutter();
+  Hive.registerAdapter(RadioStationAdapter()); // Generated adapter
+
+  final cachedStationsBox = await Hive.openBox<RadioStation>('cachedStations');
+  final List<RadioStation> initialStations = cachedStationsBox.values.toList();
+  stationsNotifier.value = initialStations;
+
+  // 3. Start background refresh (non-blocking)
+  // 💡 The loadStations is called only once here.
+  _loadStationsInBackground(cachedStationsBox);
+}
+
+Future<void> _loadStationsInBackground(Box<RadioStation> box) async {
+  List<RadioStation> mergedStations = [];
+  int currentPage = 1;
+  bool hasMore = true;
+
+  print('Starting full station refresh in background...');
+
+  try {
+    while (hasMore) {
+      final stations = await _radioService.fetchRadioStations(
+        page: currentPage,
+        limit: limitPerPage,
+      );
+
+      mergedStations.addAll(stations);
+
+      print('Loaded Stations page $currentPage: ${stations.length} items');
+
+      if (stations.length < limitPerPage) {
+        hasMore = false;
+      }
+      currentPage++;
+    }
+
+    // Update global list and cache only if the fetch was successful
+    stationsNotifier.value = mergedStations;
+    await box.clear();
+    await box.addAll(mergedStations);
+
+    print(
+      '✅ Background load complete. Total stations: ${allRadioStations.length}',
+    );
+  } catch (e) {
+    print('Background station refresh failed: $e');
+  }
+}
+
+Future<void> syncRemoteStations() async {
+  try {
+    print('🔄 Fetching fresh data from API...');
+    // Fetch Page 1
+    final firstPage = await _radioService.fetchRadioStations(
+      page: 1,
+      limit: limitPerPage,
+    );
+
+    if (firstPage.isNotEmpty) {
+      // Update the UI with fresh data
+      stationsNotifier.value = firstPage;
+      print("✅ UI Updated with ${firstPage.length} fresh stations.");
+
+      // Kick off background loading for the rest
+      _loadRemainingStationsInBackground();
+    }
+  } catch (e) {
+    print("❌ API failed, user is using cached data.");
+  }
+}
+
+void _loadRemainingStationsInBackground() {
+  Future.microtask(() async {
+    int currentPage = 2;
+    bool hasMore = true;
+    List<RadioStation> backgroundStations = [];
+
+    while (hasMore) {
+      final stations = await _radioService.fetchRadioStations(
+        page: currentPage,
+        limit: limitPerPage,
+      );
+
+      if (stations.isNotEmpty) {
+        backgroundStations.addAll(stations);
+        currentPage++;
+        if (stations.length < limitPerPage) {
+          hasMore = false;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // 3. Merge the background data back into the main list when done
+    if (backgroundStations.isNotEmpty) {
+      // Use a setState equivalent if you were managing state, but since allRadioStations
+      // is global, the list itself is updated. However, you'll need a way
+      // to inform the UI (RadioPlayerScreen) that the list has grown.
+      // A simple ValueNotifier or Stream will be needed for the UI to react.
+      // For now, we update the global list:
+      allRadioStations.addAll(backgroundStations);
+      print(
+        '✅ Background load complete. Total stations: ${allRadioStations.length}',
+      );
+      // You would typically use a Provider/Riverpod/Bloc here to trigger a UI rebuild.
+    }
+  });
 }
 
 // Global audio handlers
@@ -87,28 +198,37 @@ Future<void> _initAudioHandlers() async {
       preloadArtwork: true,
     ),
   );
-  globalMp3QueueService = Mp3PlayerHandler();
-  await globalMp3QueueService.init();
+  globalMp3QueueService = await Mp3PlayerHandler();
+  if (globalMp3QueueService != null) {
+    globalMp3QueueService.init();
+  }
+}
+
+void _initializeAdsDelayed() {
+  // Use Future.microtask to ensure this runs immediately after the current event loop finishes,
+  // which is after the app has started running (i.e., after runApp()).
+  Future.microtask(() async {
+    try {
+      await MobileAds.instance.initialize();
+      print('✅ Google Mobile Ads initialized successfully (Delayed)');
+    } catch (e) {
+      print('❌ Failed to initialize Google Mobile Ads (Delayed): $e');
+    }
+  });
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    // Initialize Mobile Ads SDK
-    await MobileAds.instance.initialize();
-    print('✅ Google Mobile Ads initialized successfully');
-  } catch (e) {
-    print('❌ Failed to initialize Google Mobile Ads: $e');
-    // Continue with app initialization even if ads fail
-  }
+  await initializeApp();
 
-  await loadStations();
-  print("allRadioStations:${allRadioStations}");
   // Initialize audio service for radio
   await _initAudioHandlers();
 
   runApp(RadioApp());
+  _initializeAdsDelayed();
+  syncRemoteStations();
+  //  _loadRemainingStationsInBackground();
 }
 
 class RadioApp extends StatelessWidget {
@@ -154,14 +274,14 @@ class _MainNavigatorState extends State<MainNavigator> {
   void _navigateToMp3RecordingsTab() {
     if (_isRecording) return;
     setState(() {
-      _mp3SubTabIndex = 1; // Set to Recordings tab
+      _mp3SubTabIndex = 2; // Set to Recordings tab
       _selectedIndex = 1; // Switch to the MP3 Player main tab
     });
   }
 
   void _navigateToMp3Recordings() {
     setState(() {
-      _selectedIndex = 1; // Switch main tab to MP3 Player
+      _selectedIndex = 2; // Switch main tab to MP3 Player
       _mp3SubTabIndex = 1; // Set MP3 Player sub-tab to Recordings
     });
   }

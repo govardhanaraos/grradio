@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'dart:math';
 
+import 'package:audio_service/audio_service.dart'; // 💡 NEW: For MediaItem
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:grradio/ads/banner_ad_widget.dart';
+import 'package:grradio/main.dart'; // 💡 NEW: To access globalMp3QueueService
+import 'package:grradio/mp3download/mp3miniplayer.dart';
 import 'package:html/dom.dart'
     as html_dom; // Fix: Use 'as' to prevent naming conflicts
 import 'package:html/parser.dart' as html_parser;
@@ -33,6 +36,9 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
   bool _hasError = false;
   String _errorMessage = '';
 
+  bool _showMiniPlayer = false;
+  String _currentSongTitle = '';
+
   String? _expandedFileId;
   Map<String, dynamic>? _fileDetails;
   bool _loadingFileDetails = false;
@@ -49,6 +55,14 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
   void initState() {
     super.initState();
     _fetchAlbumDetails();
+
+    globalMp3QueueService.mediaItem.listen((item) {
+      if (item != null) {
+        setState(() {
+          _currentSongTitle = item.title;
+        });
+      }
+    });
   }
 
   Future<void> _fetchAlbumDetails() async {
@@ -224,7 +238,7 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
       final songDivs = document.querySelectorAll('.container .bg');
 
       for (final div in songDivs) {
-        // Skip the ZIP download section - check for zip in any anchor
+        // Skip the ZIP download section
         bool hasZip = false;
         final allAnchors = div.querySelectorAll('a');
         for (final anchor in allAnchors) {
@@ -246,14 +260,11 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
 
         // Get all anchors in this .bg div
         final anchors = div.querySelectorAll('a[href*="fid="]');
-        print('anchors info: $anchors, anchors length: ${anchors.length}');
 
         if (anchors.length > 0) {
           for (final anchor in anchors) {
             final href = anchor.attributes['href'] ?? '';
-            print('href info: $href');
             if (href.contains('fid=')) {
-              // If we found the second anchor, get its text and href
               if (anchor != null) {
                 final anchorText = anchor.text?.trim() ?? '';
                 final anchorHref = anchor.attributes['href'] ?? '';
@@ -263,7 +274,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
                   final id = anchorHref.split('fid=')[1].split('&').first;
                   song['id'] = id;
                   song['url'] = '${widget.targetUrl}/?fid=$id';
-                  print('id: $id');
                 }
 
                 // Find the immediate next small tag after this anchor
@@ -278,17 +288,14 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
                   }
 
                   if (foundTargetAnchor && element.localName == 'small') {
-                    print(' element.localName: $element.localName');
                     sizeText = element.text?.trim() ?? '';
                     foundTargetAnchor = false;
                     break;
                   }
                 }
 
-                // Concatenate anchor text with size text
                 song['title'] = '$anchorText';
                 song['size'] = '${sizeText.trim()}';
-                print('song title: ${song['title']}');
               }
             }
           }
@@ -296,28 +303,20 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
 
         // Parse singers - look for singers-info class
         final singersInfo = div.querySelector('.singers-info');
-        print("singersInfo querySelector $singersInfo");
         if (singersInfo != null) {
           final singerAnchors = singersInfo.querySelectorAll(
             'a[href*="singer="]',
           );
-          print("singerAnchors querySelector $singerAnchors");
           song['singers'] = singerAnchors
-              // 1. Explicitly type the output of map as Iterable<String>
               .map<String>(
                 (html_dom.Element element) => element.text?.trim() ?? '',
               )
-              // 2. Explicitly type the input of where as String (which the runtime now expects)
               .where((String name) => name.isNotEmpty)
               .toList();
-          print('song singers: ${song['singers']}');
         }
-        print('title: ${song['title']},Song ID: ${song['id']} ');
-        // Only add if we have basic info
         if (song['title'].isNotEmpty && song['id'].isNotEmpty) {
           songs.add(song);
         }
-        print('songs info: $songs');
       }
     } catch (e) {
       print('Error parsing songs: $e');
@@ -428,63 +427,50 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
   }
 
   Widget _buildPaginationNav() {
-    if (_totalPages <= 1) return SizedBox(); // Hide pagination if only one page
+    if (_totalPages <= 1) return const SizedBox(); // Hide if only one page
 
     return Container(
-      margin: EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-      padding: EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(
+        vertical: 8,
+        horizontal: 4,
+      ), // smaller margin
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 6,
+      ), // tighter padding
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8), // smaller radius
         boxShadow: [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 2,
+            offset: Offset(0, 1),
+          ), // lighter shadow
         ],
       ),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            'Page $_currentPage of $_totalPages',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Colors.blueGrey.shade700,
+          if (_currentPage > 1)
+            _buildPaginationButton(
+              text: '‹',
+              page: _currentPage - 1,
+              isActive: false,
+            ),
+          ..._pageNumbers.map(
+            (page) => _buildPaginationButton(
+              text: '$page',
+              page: page,
+              isActive: page == _currentPage,
             ),
           ),
-          SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Previous button
-                if (_currentPage > 1)
-                  _buildPaginationButton(
-                    text: '‹ Prev',
-                    page: _currentPage - 1,
-                    isActive: false,
-                  ),
-
-                // Page numbers
-                ..._pageNumbers
-                    .map(
-                      (page) => _buildPaginationButton(
-                        text: '$page',
-                        page: page,
-                        isActive: page == _currentPage,
-                      ),
-                    )
-                    .toList(),
-
-                // Next button
-                if (_currentPage < _totalPages)
-                  _buildPaginationButton(
-                    text: 'Next ›',
-                    page: _currentPage + 1,
-                    isActive: false,
-                  ),
-              ],
+          if (_currentPage < _totalPages)
+            _buildPaginationButton(
+              text: '›',
+              page: _currentPage + 1,
+              isActive: false,
             ),
-          ),
         ],
       ),
     );
@@ -495,22 +481,28 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
     required int page,
     required bool isActive,
   }) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 2),
-      child: ElevatedButton(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: TextButton(
         onPressed: () => _navigateToPage(page),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isActive ? Colors.blueGrey : Colors.white,
-          foregroundColor: isActive ? Colors.white : Colors.blueGrey,
-          elevation: isActive ? 2 : 0,
+        style: TextButton.styleFrom(
+          backgroundColor: isActive
+              ? Colors.blueGrey.shade100
+              : Colors.transparent,
+          foregroundColor: isActive
+              ? Colors.blueGrey.shade800
+              : Colors.blueGrey,
+          minimumSize: const Size(32, 28), // smaller button size
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 4,
+          ), // tighter padding
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(4),
             side: BorderSide(
               color: isActive ? Colors.blueGrey : Colors.grey.shade300,
             ),
           ),
-          minimumSize: Size(40, 36),
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         ),
         child: Text(
           text,
@@ -534,97 +526,67 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
     };
 
     try {
-      // Parse cover image
       final coverImg = document.querySelector('.album-cover-large img');
-      print('coverImg: $coverImg');
       if (coverImg != null) {
         String src = coverImg.attributes['src'] ?? '';
         if (src.isNotEmpty && !src.startsWith('http')) {
           src = '${widget.targetUrl}/$src';
         }
-        print('src: $src');
         info['coverUrl'] = src;
       }
 
-      // Parse album title and info - FIXED: Use simpler selector
       final infoTd = document.querySelector('.album-details');
-      print('infoTd: $infoTd');
       if (infoTd != null) {
-        // Find the second TD (info column) by checking if it's not the first one with image
         final allTds = document.querySelectorAll('.album-details');
-        print('allTds: $allTds');
         var infoTdElement;
-        print('allTds.length: $allTds.length');
         if (allTds.length > 0) {
-          infoTdElement = allTds[0]; // Second TD contains the info
+          infoTdElement = allTds[0];
         }
 
         if (infoTdElement != null) {
-          // Parse title
           final titleElement = infoTdElement.querySelector('h1');
           if (titleElement != null) {
             info['title'] = titleElement.text?.trim() ?? widget.albumName;
           }
-          print('info: after titile: $info');
-          // Parse year - look for year links in paragraphs
           final paragraphs = infoTdElement.querySelectorAll('.meta-info');
-          print('paragraphs: $paragraphs');
           for (final p in paragraphs) {
-            print('p: $p');
             final text = p.text?.trim() ?? '';
-            print('text: $text');
             if (text.contains('📅') || text.contains('Year')) {
-              print('inside year');
               final yearLinks = p.querySelectorAll('a[href*="year="]');
               if (yearLinks.isNotEmpty) {
                 info['year'] = yearLinks.first.text?.trim() ?? '';
-                print('allTds: inside year: $info');
                 break;
               }
             }
           }
 
-          // Parse actors - look in actor paragraphs
           for (final p in paragraphs) {
             final text = p.text?.trim() ?? '';
-            print('text: $text');
             if (text.contains('👫🏻') || text.contains('Actor')) {
-              print('inside actor');
               final actorLinks = p.querySelectorAll('a[href*="actor"]');
-              print('actorLinks: $actorLinks');
               info['actors'] = actorLinks
                   .map<String>(
                     (html_dom.Element element) => element.text?.trim() ?? '',
                   )
                   .where((String name) => name.isNotEmpty)
                   .toList();
-              print('info[\'actors\'] : $info');
               break;
             }
           }
-          print('allTds: $allTds');
-          // Parse director - look in director paragraphs
           for (final p in paragraphs) {
             final text = p.text?.trim() ?? '';
-            print('director: text: $text');
             if (text.contains('🎥') || text.contains('Director')) {
-              print('inside if condition1');
               final directorLinks = p.querySelectorAll('a[href*="director="]');
-              print(' directorLinks: $directorLinks');
               if (directorLinks.isNotEmpty) {
                 info['director'] = directorLinks.first.text?.trim() ?? '';
               }
               break;
             }
           }
-
-          // Parse music - look in music paragraphs
           for (final p in paragraphs) {
             final text = p.text?.trim() ?? '';
-            print('allTds: $allTds');
             if (text.contains('🎹') || text.contains('Music')) {
               final musicLinks = p.querySelectorAll('a[href*="music="]');
-              print('allTds: $allTds');
               if (musicLinks.isNotEmpty) {
                 info['music'] = musicLinks.first.text?.trim() ?? '';
               }
@@ -636,7 +598,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
     } catch (e) {
       print('Error parsing album info: $e');
     }
-    print('album info: $info');
     return info;
   }
 
@@ -645,12 +606,9 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
 
     try {
       final songDiv = document.querySelector('.container .bg table');
-      print('songDivs: $songDiv');
       if (songDiv != null) {
         final songDivs = document.querySelectorAll('.container .bg table');
-        print('songDivs: $songDivs');
         for (final div in songDivs) {
-          // Skip the ZIP download section - check for zip in any anchor
           bool hasZip = false;
           final allAnchors = div.querySelectorAll('a');
           for (final anchor in allAnchors) {
@@ -660,7 +618,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
               break;
             }
           }
-          print('hasZip: $hasZip');
           if (hasZip) continue;
 
           final Map<String, dynamic> song = {
@@ -671,58 +628,41 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
             'singers': [],
           };
 
-          // Get all anchors in this .bg div
           final anchors = div.querySelectorAll('a[href*="fid="]');
 
-          print('anchors info: $anchors, anchors length: ${anchors.length}');
           if (anchors.length > 0) {
             for (final anchor in anchors) {
               final href = anchor.attributes['href'] ?? '';
-              print('href info: $href');
               if (href.contains('fid=')) {
-                // If we found the second anchor, get its text and href
                 if (anchor != null) {
                   final anchorText = anchor.text?.trim() ?? '';
                   final anchorHref = anchor.attributes['href'] ?? '';
 
-                  // Extract ID from href
                   if (anchorHref.contains('fid=')) {
                     final id = anchorHref.split('fid=')[1].split('&').first;
                     song['id'] = id;
                     song['url'] = '${widget.targetUrl}/?fid=$id';
-                    print('id: $id');
                   }
 
-                  // Concatenate anchor text with size text
                   song['title'] = '$anchorText';
-                  print('song title: ${song['title']}');
                 }
               }
             }
           }
 
-          // Parse singers - look for singers-info class
           final singersInfo = div.querySelector('a[href*="singer="]');
-          print("singersInfo querySelector $singersInfo");
           if (singersInfo != null) {
             final singerAnchors = div.querySelectorAll('a[href*="singer="]');
-            print("singerAnchors querySelector $singerAnchors");
             song['singers'] = singerAnchors
-                // 1. Explicitly type the output of map as Iterable<String>
                 .map<String>(
                   (html_dom.Element element) => element.text?.trim() ?? '',
                 )
-                // 2. Explicitly type the input of where as String (which the runtime now expects)
                 .where((String name) => name.isNotEmpty)
                 .toList();
-            print('song singers: ${song['singers']}');
           }
-          print('title: ${song['title']},Song ID: ${song['id']} ');
-          // Only add if we have basic info
           if (song['title'].isNotEmpty && song['id'].isNotEmpty) {
             songs.add(song);
           }
-          print('songs info: $songs');
         }
       }
     } catch (e) {
@@ -742,35 +682,27 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
     try {
       _showSnackbar('Downloading $mp3Name...', Colors.blue);
 
-      // Use app's documents directory (no permissions needed)
       final directory = await getApplicationDocumentsDirectory();
       final musicDir = Directory('${directory.path}/Music');
 
-      // Create Music directory if it doesn't exist
       if (!await musicDir.exists()) {
         await musicDir.create(recursive: true);
       }
 
-      print('📁 Music directory: ${musicDir.path}');
-
-      // Clean up filename
       String fileName = mp3Name;
       if (!fileName.toLowerCase().endsWith('.mp3')) {
         fileName += '.mp3';
       }
       fileName = fileName.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
 
-      // Create file path
       final filePath = '${musicDir.path}/$fileName';
       final file = File(filePath);
 
-      // Check if file already exists
       if (await file.exists()) {
         _showSnackbar('File already exists: $fileName', Colors.orange);
         return;
       }
 
-      // Download the file
       final response = await http.get(
         Uri.parse(url),
         headers: {
@@ -781,22 +713,134 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
 
       if (response.statusCode == 200) {
         await file.writeAsBytes(response.bodyBytes);
-
-        print('✅ Download completed: $filePath');
-        print('📊 File size: ${file.lengthSync()} bytes');
-
         _showSnackbar('Downloaded: $fileName to Music folder', Colors.green);
       } else {
-        print('❌ Download failed with status: ${response.statusCode}');
         _showSnackbar('Failed to download file', Colors.red);
       }
     } catch (e) {
-      print('❌ Download error: $e');
       _showSnackbar('Download error: ${e.toString()}', Colors.red);
     } finally {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  // 💡 NEW: Helper to extract best URL for streaming
+  Future<String?> _extractBestStreamUrl(String fileId) async {
+    try {
+      final url = '${widget.targetUrl}/?fid=$fileId';
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final document = html_parser.parse(response.body);
+        final downloadOptionsDiv = document.querySelector('.download-options');
+
+        if (downloadOptionsDiv != null) {
+          final anchors = downloadOptionsDiv.querySelectorAll('a');
+          String? bestUrl;
+          String? mediumUrl;
+          String? anyUrl;
+
+          for (final anchor in anchors) {
+            final href = anchor.attributes['href'] ?? '';
+            final text = anchor.text?.trim() ?? '';
+            if (href.isNotEmpty) {
+              final fullUrl = href.startsWith('http')
+                  ? href
+                  : '${widget.targetUrl}/$href';
+
+              anyUrl ??= fullUrl; // Fallback to first available
+
+              if (text.contains('128') || text.contains('Medium')) {
+                mediumUrl = fullUrl;
+              }
+              if (text.contains('320') || text.contains('High')) {
+                bestUrl = fullUrl;
+              }
+            }
+          }
+          return bestUrl ?? mediumUrl ?? anyUrl;
+        }
+      }
+    } catch (e) {
+      print('Error extracting stream URL for $fileId: $e');
+    }
+    return null;
+  }
+
+  Future<void> _playAllSongs() async {
+    if (_songs.isEmpty) return;
+
+    if (globalMp3QueueService == null) {
+      _showSnackbar(
+        'Audio service is not ready. Try restarting the app.',
+        Colors.red,
+      );
+      print('ERROR: globalMp3QueueService is null. Playback aborted.');
+      return;
+    }
+
+    // Show loading indicator
+    /*showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => Center(child: CircularProgressIndicator()),
+    );*/
+
+    try {
+      // 1. Create MediaItems for all songs
+      final List<MediaItem> mediaItems = [];
+
+      for (final song in _songs) {
+        final mediaItem = MediaItem(
+          id: song['id'] as String,
+          album: _albumInfo?['title'] ?? widget.albumName,
+          title: song['title'] as String,
+          artist:
+              (song['singers'] as List<dynamic>?)?.join(', ') ??
+              'Unknown Artist',
+          duration: null,
+          artUri:
+              (_albumInfo?['coverUrl'] as String?) != null &&
+                  (_albumInfo?['coverUrl'] as String).isNotEmpty
+              ? Uri.parse(_albumInfo?['coverUrl'] as String)
+              : null,
+        );
+        mediaItems.add(mediaItem);
+      }
+
+      // 2. Set the entire queue first
+      await globalMp3QueueService.setQueue(mediaItems, widget.targetUrl);
+
+      // 3. Load and play the first song
+      if (mediaItems.isNotEmpty) {
+        setState(() {
+          _showMiniPlayer = true;
+          _currentSongTitle = mediaItems.first.title;
+        });
+        await globalMp3QueueService.loadAndPlayFirstSong();
+      }
+
+      //Navigator.pop(context); // Dismiss loading
+      _showSnackbar('Playing all songs...', Colors.green);
+    } catch (e) {
+      Navigator.pop(context); // Dismiss loading
+      _showSnackbar('Error playing all: $e', Colors.red);
+      print('Error in _playAllSongs: $e');
+    }
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final hours = twoDigits(duration.inHours);
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+
+    if (duration.inHours > 0) {
+      return '$hours:$minutes:$seconds';
+    } else {
+      return '$minutes:$seconds';
     }
   }
 
@@ -912,12 +956,12 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
     );
   }
 
-  // 💡 UPDATED: Build download button with progress
   Widget _buildDownloadButton({
     required String url,
     required String fileName,
     required String buttonText,
   }) {
+    // ... [Same implementation as before]
     final downloadKey = '${url.hashCode}-$fileName';
     final isDownloading = _isDownloading[downloadKey] == true;
     final progress = _downloadProgress[downloadKey] ?? 0.0;
@@ -958,7 +1002,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ),
-          // Progress indicator
           if (isDownloading && progress > 0) ...[
             SizedBox(height: 4),
             LinearProgressIndicator(
@@ -988,7 +1031,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Album Cover
             Container(
               width: 180,
               height: 180,
@@ -1034,7 +1076,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
               ),
             ),
             SizedBox(width: 16),
-            // Album Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1368,10 +1409,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
           };
           _loadingFileDetails = false;
         });
-
-        print('Parsed album name: $albumName');
-        print('Parsed download options: $downloadLinks');
-        print('Additional info: $additionalInfo');
       } else {
         throw Exception(
           'Failed to load file details. Status: ${response.statusCode}',
@@ -1504,13 +1541,37 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
                   SizedBox(height: 8),
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Songs (${_songs.length})',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueGrey.shade800,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Songs (${_songs.length})',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blueGrey.shade800,
+                          ),
+                        ),
+                        // 💡 NEW: Play All Button
+                        if (_songs.isNotEmpty)
+                          ElevatedButton.icon(
+                            icon: Icon(Icons.play_arrow, size: 18),
+                            label: Text('Play All'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueGrey,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              textStyle: TextStyle(fontSize: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                            onPressed: _playAllSongs,
+                          ),
+                      ],
                     ),
                   ),
                   SizedBox(height: 8),
@@ -1524,15 +1585,39 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
                             },
                           ),
                   ),
-                  Container(
-                    alignment: Alignment.center,
-                    height: 60, // Guaranteed space for the ad
-                    child: const BannerAdWidget(),
-                  ),
+
                   _buildPaginationNav(),
                 ],
               ),
       ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const BannerAdWidget(),
+          if (_showMiniPlayer)
+            StreamBuilder<bool>(
+              stream: globalMp3QueueService.playbackState
+                  .map((s) => s.playing)
+                  .distinct(),
+              builder: (context, snapshot) {
+                final isPlaying = snapshot.data ?? false;
+                return MiniPlayer(
+                  title: _currentSongTitle,
+                  positionStream: globalMp3QueueService.player.positionStream,
+                  durationStream: globalMp3QueueService.player.durationStream,
+                  isPlaying: isPlaying,
+                  onPause: () => globalMp3QueueService.pause(),
+                  onPlay: () => globalMp3QueueService.play(),
+                  onClose: () async {
+                    await globalMp3QueueService.stop();
+                    setState(() => _showMiniPlayer = false);
+                  },
+                );
+              },
+            ),
+        ],
+      ),
+
       floatingActionButton: FloatingActionButton(
         onPressed: _fetchAlbumDetails,
         backgroundColor: Colors.blueGrey,

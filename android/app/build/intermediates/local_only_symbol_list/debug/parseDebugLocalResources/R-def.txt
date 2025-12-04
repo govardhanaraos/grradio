@@ -3,6 +3,7 @@ local
 color ic_launcher_background
 drawable android12splash
 drawable background
+drawable branding
 drawable ic_launcher_foreground
 drawable launch_background
 drawable splash

@@ -6,10 +6,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:grradio/ads/banner_ad_widget.dart';
-import 'package:grradio/handler/mp3playerhandler.dart';
 import 'package:grradio/main.dart';
 import 'package:grradio/mp3download/albumdetailsscreen.dart';
 import 'package:grradio/mp3download/mp3_constants.dart';
+import 'package:grradio/mp3download/mp3miniplayer.dart';
 import 'package:grradio/responsebutton.dart';
 import 'package:html/parser.dart' as html;
 import 'package:http/http.dart' as http;
@@ -39,6 +39,9 @@ class _Mp3DownloadResultsScreenState extends State<Mp3DownloadResultsScreen> {
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
+  String searchUrl = '';
+  bool _showMiniPlayer = false;
+  String _currentSongTitle = '';
 
   // 💡 NEW: Add toggle states for sections
   bool _showDirectories = true;
@@ -65,7 +68,7 @@ class _Mp3DownloadResultsScreenState extends State<Mp3DownloadResultsScreen> {
         _isLoading = true;
         _hasError = false;
       });
-      String searchUrl = (widget.language == 'Telugu')
+      searchUrl = (widget.language == 'Telugu')
           ? Mp3Constants.teluguMP3Url
           : Mp3Constants.hindiMP3Url;
       final encodedQuery = Uri.encodeComponent(widget.searchQuery);
@@ -891,16 +894,24 @@ class _Mp3DownloadResultsScreenState extends State<Mp3DownloadResultsScreen> {
                 // 💡 NEW: Play Button
                 IconButton(
                   icon: const Icon(Icons.play_circle_fill, color: Colors.green),
-                  onPressed: () {
-                    // 🛑 You must ensure the radio stops when MP3 starts
+                  onPressed: () async {
+                    // Ensure radio stops first if needed
                     // globalRadioAudioHandler.stop();
-                    final List<SongData> validSongs = _files
-                        .where(
-                          (song) => song['url'] != null,
-                        ) // Filter out null URLs
-                        .toList();
-                    // Pass the entire file list and the index
-                    globalMp3QueueService.startQueue(_files, index);
+
+                    final fileId = file['id'] as String;
+                    final fileName = file['name'] as String? ?? 'Unknown';
+                    print(
+                      'fileId : $fileId :fileName: $fileName : searchUrl: $searchUrl',
+                    );
+                    setState(() {
+                      _showMiniPlayer = true; // ✅ show immediately
+                      _currentSongTitle = fileName;
+                    });
+                    await globalMp3QueueService.playSingleSong(
+                      fileId,
+                      fileName,
+                      searchUrl,
+                    );
                   },
                 ),
                 Icon(
@@ -1223,11 +1234,7 @@ class _Mp3DownloadResultsScreenState extends State<Mp3DownloadResultsScreen> {
                         ),
                       ),
                   ],
-                  Container(
-                    alignment: Alignment.center,
-                    height: 60, // Guaranteed space for the ad
-                    child: const BannerAdWidget(),
-                  ),
+
                   // 💡 NEW: Add some spacing at the bottom
                   if (_directories.isEmpty || _files.isEmpty)
                     SizedBox(height: 16),
@@ -1239,6 +1246,36 @@ class _Mp3DownloadResultsScreenState extends State<Mp3DownloadResultsScreen> {
         backgroundColor: Colors.blueGrey,
         child: Icon(CupertinoIcons.refresh, color: Colors.white),
         tooltip: 'Refresh Results',
+      ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Show the ad first
+          const BannerAdWidget(),
+
+          // Then conditionally show the mini player
+          if (_showMiniPlayer)
+            StreamBuilder<bool>(
+              stream: globalMp3QueueService.playbackState
+                  .map((s) => s.playing)
+                  .distinct(),
+              builder: (context, snapshot) {
+                final isPlaying = snapshot.data ?? false;
+                return MiniPlayer(
+                  title: _currentSongTitle,
+                  positionStream: globalMp3QueueService.player.positionStream,
+                  durationStream: globalMp3QueueService.player.durationStream,
+                  isPlaying: isPlaying,
+                  onPause: () => globalMp3QueueService.pause(),
+                  onPlay: () => globalMp3QueueService.play(),
+                  onClose: () async {
+                    await globalMp3QueueService.stop();
+                    setState(() => _showMiniPlayer = false);
+                  },
+                );
+              },
+            ),
+        ],
       ),
     );
   }
