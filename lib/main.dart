@@ -1,16 +1,19 @@
-import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:grradio/handler/mp3playerhandler.dart';
 import 'package:grradio/more/more.dart';
 import 'package:grradio/mp3download/mp3downloadscreen.dart'; // Add this import
 import 'package:grradio/mp3playerscreen.dart';
-import 'package:grradio/radioplayerhandler.dart';
-import 'package:grradio/radioplayerscreen.dart';
 import 'package:grradio/radiostation.dart';
 import 'package:grradio/radiostationserviceapi.dart';
+import 'package:grradio/util/radioplayerhandler.dart' as handler;
+import 'package:grradio/util/screens/miniplayer.dart';
+import 'package:grradio/util/screens/radioplayerscreen_stub.dart'
+    if (dart.library.io) 'package:grradio/util/screens/radioplayerscreen_mobile.dart'
+    if (dart.library.html) 'package:grradio/util/screens/radioplayerscreen_web.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -128,22 +131,23 @@ void _loadRemainingStationsInBackground() {
 
     // 3. Merge the background data back into the main list when done
     if (backgroundStations.isNotEmpty) {
-      // Use a setState equivalent if you were managing state, but since allRadioStations
-      // is global, the list itself is updated. However, you'll need a way
-      // to inform the UI (RadioPlayerScreen) that the list has grown.
-      // A simple ValueNotifier or Stream will be needed for the UI to react.
-      // For now, we update the global list:
-      allRadioStations.addAll(backgroundStations);
+      final current = stationsNotifier.value;
+      final merged = [...current, ...backgroundStations];
+
+      // Deduplicate by id
+      final uniqueStations = {for (var s in merged) s.id: s}.values.toList();
+
+      stationsNotifier.value = uniqueStations;
+
       print(
-        '✅ Background load complete. Total stations: ${allRadioStations.length}',
+        '✅ Background load complete. Total stations: ${stationsNotifier.value.length}',
       );
-      // You would typically use a Provider/Riverpod/Bloc here to trigger a UI rebuild.
     }
   });
 }
 
 // Global audio handlers
-late AudioHandler globalRadioAudioHandler;
+late dynamic globalRadioAudioHandler;
 late AudioPlayer globalMp3Player;
 late Mp3PlayerHandler globalMp3QueueService;
 
@@ -167,6 +171,7 @@ void pauseMp3IfPlaying() {
 }
 
 void setupAudioSession() async {
+  if (kIsWeb) return; // Web has no AVAudioSession; skip
   final session = await AudioSession.instance;
   await session.configure(
     const AudioSessionConfiguration(
@@ -182,29 +187,40 @@ void setupAudioSession() async {
 
 Future<void> _initAudioHandlers() async {
   setupAudioSession();
-
-  // Initialize MP3 player
   globalMp3Player = AudioPlayer();
+  print('kIsWeb : $kIsWeb');
 
-  globalRadioAudioHandler = await AudioService.init(
-    builder: () => RadioPlayerHandler(stations: allRadioStations),
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.yourapp.radio',
-      androidNotificationChannelName: 'Radio Streaming',
-      androidNotificationChannelDescription:
-          'Audio playback for internet radio',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: true,
-      preloadArtwork: true,
-    ),
+  //if (kIsWeb) {
+  // ✅ Web: instantiate directly, no AudioService
+  globalRadioAudioHandler = handler.RadioPlayerHandler(
+    stations: allRadioStations,
   );
+  /* } else {
+    // ✅ Mobile: wrap in AudioService
+    globalRadioAudioHandler = await AudioService.init(
+      builder: () => handler.RadioPlayerHandler(stations: allRadioStations),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.yourapp.radio',
+        androidNotificationChannelName: 'Radio Streaming',
+        androidNotificationChannelDescription:
+            'Audio playback for internet radio',
+        androidNotificationOngoing: true,
+        androidStopForegroundOnPause: true,
+        preloadArtwork: true,
+      ),
+    );
+  }*/
+
   globalMp3QueueService = await Mp3PlayerHandler();
-  if (globalMp3QueueService != null) {
-    globalMp3QueueService.init();
-  }
+  globalMp3QueueService.init();
 }
 
 void _initializeAdsDelayed() {
+  if (kIsWeb) {
+    print('Skipping Google Mobile Ads initialization on Web');
+    return;
+  }
+
   // Use Future.microtask to ensure this runs immediately after the current event loop finishes,
   // which is after the app has started running (i.e., after runApp()).
   Future.microtask(() async {
@@ -470,39 +486,52 @@ class _MainNavigatorState extends State<MainNavigator> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          key: ValueKey<int>(_selectedIndex),
-          child: _widgetOptions.elementAt(_selectedIndex),
-        ),
-      ),
-      bottomNavigationBar: Container(
-        margin: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 20,
-              offset: Offset(0, 5),
-              spreadRadius: 2,
+      body: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                key: ValueKey<int>(_selectedIndex),
+                child: _widgetOptions.elementAt(_selectedIndex),
+              ),
             ),
-          ],
-          border: Border.all(color: Colors.grey.shade200, width: 1),
-        ),
-        child: Row(
-          children: List.generate(4, (index) {
-            // Now 4 items
-            return _buildCustomNavItem(
-              index: index,
-              icon: _getItemIcon(index),
-              label: _getItemLabel(index),
-              isSelected: _selectedIndex == index,
-            );
-          }),
-        ),
+          ),
+          // ✅ Conditionally show MiniPlayer only on Web
+        ],
+      ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (kIsWeb) MiniPlayer(handler: globalRadioAudioHandler),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  offset: Offset(0, 5),
+                  spreadRadius: 2,
+                ),
+              ],
+              border: Border.all(color: Colors.grey.shade200, width: 1),
+            ),
+            child: Row(
+              children: List.generate(4, (index) {
+                // Now 4 items
+                return _buildCustomNavItem(
+                  index: index,
+                  icon: _getItemIcon(index),
+                  label: _getItemLabel(index),
+                  isSelected: _selectedIndex == index,
+                );
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }

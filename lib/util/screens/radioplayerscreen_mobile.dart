@@ -152,14 +152,8 @@ class _RadioPlayerScreenState extends State<RadioPlayerScreen>
             station.name.toLowerCase().contains(query) ||
             (station.state?.toLowerCase().contains(query) ?? false) ||
             (station.language?.toLowerCase().contains(query) ?? false) ||
+            (station.genre?.toLowerCase().contains(query) ?? false) ||
             (station.page?.toLowerCase().contains(query) ?? false),
-      );
-    }
-
-    if (_selectedLanguage != 'All') {
-      final selectedLanguageLower = _selectedLanguage.toLowerCase();
-      stations = stations.where(
-        (station) => (station.language?.toLowerCase() == selectedLanguageLower),
       );
     }
     return stations.toList();

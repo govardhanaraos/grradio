@@ -33,6 +33,8 @@ dependencies:
   rxdart: ^0.27.7
   flutter_native_splash: ^2.4.7
   flutter_launcher_icons: ^0.14.4
+  web: ^1.0.0
+  flutter_bootstrap: ^2.0.0
 
 # pubspec.yaml
 
@@ -54,20 +56,19 @@ flutter_native_splash:
   color: "#FFFFFF" # Use a color that matches your app's theme (e.g., white)
 
   # 💡 CRITICAL: Define the path to your large logo image
-  image: assets/images/gr_radio_native_splash.png
+  image: assets/images/gr_radio_splash.png
 
   # OPTIONAL: Set a maximum size for the image (as a fraction of the screen)
   # Recommended for a big logo
-  image_android: assets/images/gr_radio_native_splash.png
-  image_ios: assets/images/gr_radio_native_splash.png
+  image_android: assets/images/gr_radio_splash.png
+  image_ios: assets/images/gr_radio_splash.png
 
   # Android Specific (controls size):
   # Set this to true to cover the entire screen (usually for background images)
   # or false to center the image with padding (best for logos).
   android_12:
-    image: assets/images/gr_radio_native_splash.png
+    image: assets/images/gr_radio_splash.png
 
-  branding: assets/images/gr_radio_native_splash.png # optional for bottom branding
   android: true
   ios: true
   web: false
